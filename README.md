@@ -1,61 +1,24 @@
 # OneBot · cortico-world-onebot
 
-给 Coopanion 桌宠加一件事：**通过 OneBot v11 接入 QQ**。
+让桌宠使用 QQ。连接到你的 NapCat 或 SnowLuma，然后在 QQ 上和 TA 聊天吧。
 
-它的目标不是给每个 `send_*` / `set_*` 写一个工具，而是用一层通用机制覆盖 OneBot 的全部 action 和 event：
+支持所有 OneBot v11 正向 WebSocket 实现：NapCat、SnowLuma、LLOneBot、Lagrange.OneBot 等。
 
-- **action**：一个 `onebot_call` dispatcher + 本机同步的 OneBot action catalog；
-- **event**：一条 WS 全量接收，消息可读化，其他事件统一 `onebot.event` 兜底；
-- **策略**：默认全开，用 `actions.disabled` / `events.mute` / `events.drop` 做配置减法。
+## 功能
+
+装好后，桌宠会多出五个工具，覆盖几乎所有 QQ 功能：
+
+| 工具 | 作用 |
+| --- | --- |
+| `onebot_actions` | 搜索和查看所有可用功能（约 200 个） |
+| `onebot_call` | 调用任意功能：发消息、发图、撤回、群管…… |
+| `onebot_events` | 查看历史事件和通知 |
+| `onebot_view_image` | 下载图片给模型查看 |
+| `onebot_status` | 查看连接状态和配置 |
 
 这是一个 `cortico` 的 **World 扩展**（`kind: world`，`api: 6`），只补一个 `onebot` 世界。
 
-## 接哪些实现
-
-任何说 OneBot v11 正向 WebSocket 的实现都能接：SnowLuma、NapCat、LLOneBot、Lagrange.OneBot、go-cqhttp 等。
-
-连上之后用 `get_version_info` 的 `app_name` 判断对端是谁，控制台的连接徽标会显示出来（例如 `snowluma：蒂仆希可`），而不是笼统的“已连接”。
-
-区别只在 action 目录：不同实现暴露的 action 不一样，目录越全，模型能做的事越多。
-
-### 目录怎么来
-
-三份目录都随包发布，装完即用，不需要跑任何脚本：
-
-| `implementation` | 用哪份目录 | 动作数 |
-| --- | --- | --- |
-| `auto` | 按 `app_name` 自动选，认不出用 `onebot11` | — |
-| `snowluma` | `src/catalogs/snowluma.json` | 200 |
-| `napcat` | `src/catalogs/napcat.json` | 177 |
-| `onebot11` | `src/catalogs/onebot11.json` | 36 |
-
-加载顺序：`ONEBOT_CATALOG` 环境变量 → `src/catalogs/<impl>.json` → `src/catalogs/onebot11.json`。没有对应文件时静默退回标准目录。
-
-实现对端加了新动作时，不用等新版本：控制台的「动作目录」页签里有更新按钮（见下文）。
-
-> **它不内置 MCP runtime。** 运行期直接连实现的正向 WS，事件和 action 走同一条连接。
->
-> **目录是快照，不是实时视图。** 实现对端新增的 action 不会自动出现；控制台的「动作目录」页签里点一下「更新动作」即可重新拉取。
->
-> **非官方扩展**：与 Coopanion / cortico / 各 OneBot 实现的作者无关。代码 MIT，见 [LICENSE](LICENSE)。
-
-## 它做了什么
-
-装好并启用之后，桌宠会多出五个工具：
-
-| 工具 | 标签 | 作用 |
-| --- | --- | --- |
-| `onebot_actions` | `read` | 查 action：关键词/分类搜索、别名、完整参数 JSON Schema（同步完整 catalog 后是 200 个） |
-| `onebot_call` | `act` | 调用任意 action；只读直接执行，写操作要 `confirm:true` |
-| `onebot_events` | `read` | 按 kind / 时间查归档的原始 OneBot 事件，用于历史、转发或被 mute 的事件 |
-| `onebot_view_image` | `read` | 把图片 URL 或 `file_id` 下载成模型能看的附件 |
-| `onebot_status` | `read` | 连接、账号、catalog 来源、写权限与事件策略 |
-
-没有 `send_private_msg`、`send_group_forward_msg`、`set_group_ban` 这些专用工具。它们都是：
-
-```json
-{ "action": "send_group_msg", "params": { "group_id": 123456, "message": "hello" } }
-```
+连上之后，控制台会显示对端的名字（例如 `snowluma：蒂仆希可`），而不是笼统的“已连接”。
 
 ## 安装
 

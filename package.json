@@ -2,7 +2,7 @@
   "name": "cortico-world-onebot",
   "version": "0.1.0",
   "type": "module",
-  "description": "OneBot —— 给 Coopanion 桌宠的 cortico World 扩展：通过 OneBot v11 正向 WebSocket 接入任意实现（SnowLuma / NapCat / LLOneBot / Lagrange），用一个通用 dispatcher 覆盖全部 action，用 raw 事件泵覆盖全部 event。 / A cortico World extension that connects to any OneBot v11 implementation over a forward WebSocket, exposes every action through one generic dispatcher, and archives every event.",
+  "description": "让TA使用QQ。连接到你的napcat或者snowluma，然后在QQ上和TA聊天吧。就像直接用QQ一样，使用几乎所有功能。",
   "license": "MIT",
   "author": {
     "name": "AqualCross"
