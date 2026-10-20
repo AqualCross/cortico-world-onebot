@@ -1,0 +1,185 @@
+{
+  "tools": [
+    {
+      "name": "onebot_actions",
+      "description": "Look up OneBot actions. With no args it lists the catalog categories; query/category search the catalog; name returns one action's full docs and JSON Schema.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search action name, alias or summary."
+          },
+          "name": {
+            "type": "string",
+            "description": "Return the full catalog entry and inputSchema for this action or alias."
+          },
+          "category": {
+            "type": "string",
+            "description": "Filter by catalog category, e.g. 消息 or 群管理."
+          }
+        }
+      },
+      "tags": [
+        "read"
+      ],
+      "summary": {
+        "zh": "查 OneBot action 目录、参数 Schema 和分类。",
+        "en": "Look up the OneBot action catalog, JSON Schemas and categories."
+      }
+    },
+    {
+      "name": "onebot_call",
+      "description": "Call any OneBot action. Read-only actions run immediately; write actions require confirm=true.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Action name or alias, e.g. send_group_msg or get_group_info."
+          },
+          "params": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "The action params object. For send_* actions, message may be a string or OneBot segment array."
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "Set true to execute a write action."
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "description": "Optional call timeout in milliseconds (1000-120000)."
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "tags": [
+        "act"
+      ],
+      "summary": {
+        "zh": "调用任意 OneBot action；只读直接执行，写操作需要 confirm=true。",
+        "en": "Call any OneBot action; reads run immediately, writes need confirm=true."
+      }
+    },
+    {
+      "name": "onebot_events",
+      "description": "Read archived OneBot events by kind/time, including history that is no longer in the conversation. kind supports * (e.g. notice/*).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "Event kind or glob: message/group, notice/group_recall, meta_event/*."
+          },
+          "since": {
+            "type": "string",
+            "description": "ISO 8601 lower bound, inclusive."
+          },
+          "until": {
+            "type": "string",
+            "description": "ISO 8601 upper bound, inclusive."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum events to return (1-100, default 30)."
+          },
+          "raw": {
+            "type": "boolean",
+            "description": "Include meta.raw. Default true; set false for a compact result."
+          }
+        }
+      },
+      "tags": [
+        "read"
+      ],
+      "summary": {
+        "zh": "按类型和时间查已归档的 OneBot 事件。",
+        "en": "Read archived OneBot events by kind and time."
+      }
+    },
+    {
+      "name": "onebot_view_image",
+      "description": "Download an image and return it so you can see it. Use this when a message only shows [图片], or when you have an image URL or OneBot file_id from get_image or onebot_events. Provide url, or file/file_id for a OneBot cached image.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "http(s) image URL."
+          },
+          "file": {
+            "type": "string",
+            "description": "A OneBot image file parameter (usually from an image segment)."
+          },
+          "file_id": {
+            "type": "string",
+            "description": "A OneBot cached image file_id."
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "description": "Optional download timeout in milliseconds."
+          }
+        }
+      },
+      "tags": [
+        "read"
+      ],
+      "summary": {
+        "zh": "把图片 URL 或图片 file_id 下载成模型能看的附件。",
+        "en": "Download an image URL or image file_id as an attachment the model can see."
+      }
+    },
+    {
+      "name": "onebot_status",
+      "description": "OneBot connection, account, catalog, and current write/event policy.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+      "tags": [
+        "read"
+      ],
+      "summary": {
+        "zh": "看 OneBot 连接、账号、catalog 来源和当前策略。",
+        "en": "Show OneBot connection, account, catalog source and current policy."
+      }
+    }
+  ],
+  "events": [
+    {
+      "type": "onebot.message",
+      "description": {
+        "zh": "一条 QQ 消息；正文是可读的一行，meta.raw 是原始 OneBot 事件。",
+        "en": "A QQ message; text is a readable line and meta.raw is the original OneBot event."
+      },
+      "trigger": "debounce"
+    },
+    {
+      "type": "onebot.event",
+      "description": {
+        "zh": "未专门投影的 OneBot 事件（notice/request/meta_event 等）；正文是一行摘要，meta.raw 是原始事件。",
+        "en": "An OneBot event that is not specially projected (notice/request/meta_event, etc.); text is a compact line and meta.raw is the original event."
+      },
+      "trigger": "debounce"
+    },
+    {
+      "type": "onebot.connection",
+      "description": {
+        "zh": "OneBot 连接建立或断开。",
+        "en": "OneBot connected or disconnected."
+      },
+      "trigger": "debounce"
+    }
+  ],
+  "prompts": [
+    {
+      "key": "worlds.onebot.env",
+      "title": "提示词",
+      "role": "envPrompt",
+      "content": "\n"
+    }
+  ]
+}

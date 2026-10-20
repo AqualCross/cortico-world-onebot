@@ -1,0 +1,193 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import { WebSocketServer } from 'ws';
+
+import { OneBotWorld } from '../src/world.js';
+import { loadCatalog } from '../src/catalog.js';
+
+const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+  'base64',
+);
+
+const tick = (ms = 10) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function waitFor(fn, timeoutMs = 3000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const value = fn();
+    if (value) return value;
+    await tick();
+  }
+  throw new Error('waitFor timeout');
+}
+
+function makeHost(events) {
+  const logger = {
+    trace() {}, debug() {}, info() {}, warn() {}, error() {}, emit() {},
+    child() { return this; },
+  };
+  return {
+    pushEvent: async (event) => {
+      const saved = { ...event, cursor: events.length + 1, origin: 'external' };
+      events.push(saved);
+      return saved;
+    },
+    pushDeferred() {},
+    store: {
+      range: () => events,
+      get: (cursor) => events.find((event) => event.cursor === cursor),
+      latestCursor: () => events.length,
+      around: () => [],
+      grep: () => [],
+    },
+    modelFacts: { model: () => 'test', accepts: (mime) => mime === 'image/png', contextWindow: () => undefined },
+    blob: () => null,
+    reportUsage() {},
+    log: logger,
+  };
+}
+
+test('OneBot World: connection, action dispatcher, write gate, raw event archive', async (t) => {
+  const requests = [];
+  const imageServer = createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'image/png' });
+    res.end(PNG);
+  });
+  await new Promise((resolve) => imageServer.listen(0, '127.0.0.1', resolve));
+  const imagePort = imageServer.address().port;
+
+  const wss = new WebSocketServer({ port: 0 });
+  await new Promise((resolve) => wss.once('listening', resolve));
+  const port = wss.address().port;
+
+  wss.on('connection', (socket) => {
+    socket.on('message', (raw) => {
+      const request = JSON.parse(String(raw));
+      requests.push(request);
+      let data = null;
+      if (request.action === 'get_login_info') data = { user_id: 10001, nickname: 'Bot' };
+      else if (request.action === 'get_version_info') data = { app_name: 'SnowLuma', app_version: 'test' };
+      else if (request.action === 'get_group_info') data = { group_id: request.params.group_id, group_name: 'Test Group' };
+      else if (request.action === 'send_group_msg') data = { message_id: 9001 };
+      else data = {};
+      socket.send(JSON.stringify({ status: 'ok', retcode: 0, data, echo: request.echo }));
+    });
+  });
+
+  const events = [];
+  const host = makeHost(events);
+  const world = new OneBotWorld({
+    cfg: {
+      wsUrl: `ws://127.0.0.1:${port}`,
+      token: 'test-token',
+      actions: { writePolicy: 'confirm' },
+    },
+    timezone: 'UTC',
+  });
+
+  t.after(async () => {
+    await world.stop();
+    await new Promise((resolve) => wss.close(resolve));
+    await new Promise((resolve) => imageServer.close(resolve));
+  });
+
+  await world.start(host);
+  await waitFor(() => events.some((event) => event.type === 'onebot.connection'));
+
+  const tools = Object.fromEntries(world.tools().map((tool) => [tool.name, tool]));
+
+  const catalog = await tools.onebot_actions.handler({}, {});
+  const catalogData = JSON.parse(catalog);
+  assert.equal(catalogData.total, loadCatalog({ impl: 'snowluma' }).total);
+  assert.ok(catalogData.categories.length > 0);
+
+  const query = await tools.onebot_actions.handler({ name: 'send_group_msg' }, {});
+  const queryData = JSON.parse(query);
+  assert.equal(queryData.action.name, 'send_group_msg');
+  assert.ok(queryData.action.inputSchema);
+
+  const read = await tools.onebot_call.handler({
+    action: 'get_group_info',
+    params: { group_id: 123 },
+  }, {});
+  const readData = JSON.parse(read);
+  assert.equal(readData.ok, true);
+  assert.equal(readData.data.group_name, 'Test Group');
+
+  const staged = await tools.onebot_call.handler({
+    action: 'send_group_msg',
+    params: { group_id: 123, message: 'hello' },
+  }, {});
+  assert.match(staged, /^\[confirm required\]/);
+
+  const sent = await tools.onebot_call.handler({
+    action: 'send_group_msg',
+    params: { group_id: 123, message: 'hello' },
+    confirm: true,
+  }, {});
+  const sentData = JSON.parse(sent);
+  assert.equal(sentData.ok, true);
+  assert.equal(sentData.data.message_id, 9001);
+
+  // 被禁用的 action 对模型等同于不存在：两者回执一致，只有回显的 action 名不同。
+  const hidden = await tools.onebot_call.handler({
+    action: 'set_restart',
+    params: {},
+    confirm: true,
+  }, {});
+  const missing = await tools.onebot_call.handler({
+    action: 'no_such_action',
+    params: {},
+    confirm: true,
+  }, {});
+  assert.equal(hidden.failed, true);
+  assert.equal(hidden.text, missing.text.replace('no_such_action', 'set_restart'));
+
+  const server = wss.clients.values().next().value;
+  server.send(JSON.stringify({
+    post_type: 'message',
+    message_type: 'group',
+    group_id: 123,
+    user_id: 456,
+    message_id: 789,
+    time: 1700000000,
+    sender: { nickname: 'Alice' },
+    message: [
+      { type: 'text', data: { text: 'hi there' } },
+      { type: 'image', data: { url: `http://127.0.0.1:${imagePort}/a.png`, file: 'a.png' } },
+    ],
+  }));
+
+  const message = await waitFor(() => events.find((event) => event.type === 'onebot.message'));
+  assert.match(message.text, /Alice\(456\): hi there.*#789/);
+  assert.equal(message.meta.kind, 'message/group');
+  assert.deepEqual(message.meta.conv, { kind: 'group', id: 123 });
+  assert.equal(message.meta.raw.message_id, 789);
+  assert.equal(message.blobs.length, 1);
+  assert.equal(message.blobs[0].mime, 'image/png');
+  assert.ok(message.blobs[0].bytes.length > 0);
+
+  const viewed = await tools.onebot_view_image.handler({
+    url: `http://127.0.0.1:${imagePort}/a.png`,
+  }, {});
+  assert.equal(viewed.blobs.length, 1);
+  assert.equal(viewed.blobs[0].mime, 'image/png');
+  assert.match(viewed.text, /^\[image /);
+
+  const archived = await tools.onebot_events.handler({ kind: 'message/*', limit: 10 }, {});
+  const archivedData = JSON.parse(archived);
+  assert.equal(archivedData.count, 1);
+  assert.equal(archivedData.events[0].raw.message_id, 789);
+
+  const status = JSON.parse(await tools.onebot_status.handler({}, {}));
+  assert.equal(status.connected, true);
+  assert.equal(status.selfId, 10001);
+  assert.ok(status.catalog.source);
+  assert.ok(requests.some((request) => request.action === 'send_group_msg'));
+
+  // 控制台的连接徽标要说出连的是哪个实现，而不只是“已连接”。
+  const badge = world.webUi('zh').badges.find((item) => item.label === '连接');
+  assert.equal(badge.value, 'snowluma：Bot');
+});

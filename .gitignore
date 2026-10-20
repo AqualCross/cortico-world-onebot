@@ -1,0 +1,22 @@
+# 依赖 / 锁文件
+node_modules/
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# 运行时产物
+scratch/
+*.tmp
+*.log
+*.tgz
+.env
+
+# 本机同步的实现目录（覆盖随包快照时用）
+src/catalogs/custom.json
+catalog.local.json
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

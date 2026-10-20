@@ -1,0 +1,70 @@
+{
+  "name": "cortico-world-onebot",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "OneBot —— 给 Coopanion 桌宠的 cortico World 扩展：通过 OneBot v11 正向 WebSocket 接入任意实现（SnowLuma / NapCat / LLOneBot / Lagrange），用一个通用 dispatcher 覆盖全部 action，用 raw 事件泵覆盖全部 event。 / A cortico World extension that connects to any OneBot v11 implementation over a forward WebSocket, exposes every action through one generic dispatcher, and archives every event.",
+  "license": "MIT",
+  "author": {
+    "name": "AqualCross"
+  },
+  "homepage": "https://github.com/AqualCross/cortico-world-onebot#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AqualCross/cortico-world-onebot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AqualCross/cortico-world-onebot/issues"
+  },
+  "keywords": [
+    "cortico-world",
+    "cortico",
+    "coopanion",
+    "onebot",
+    "onebot-v11",
+    "qq",
+    "snowluma",
+    "napcat",
+    "llonebot",
+    "lagrange"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src",
+    "tools/sync-catalog.mjs",
+    "describe.json",
+    "CHANGELOG.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "describe": "node tools/describe.mjs",
+    "check": "node tools/check.mjs",
+    "selfcheck": "node tools/check.mjs",
+    "sync-catalog": "node tools/sync-catalog.mjs",
+    "test": "node --test",
+    "prepublishOnly": "node tools/check.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "cortico": {
+    "kind": "world",
+    "api": 6,
+    "displayName": "OneBot",
+    "webUiClient": "src/webui/client.js",
+    "tags": [
+      "qq",
+      "onebot"
+    ],
+    "describe": "describe.json"
+  }
+}

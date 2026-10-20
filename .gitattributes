@@ -1,0 +1,10 @@
+# 一律按 LF 进入仓库（源码是 JS/Markdown，跨平台友好）
+* text=auto eol=lf
+
+# 明确不要当文本处理
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.ico binary

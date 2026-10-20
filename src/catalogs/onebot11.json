@@ -1,0 +1,798 @@
+{
+  "source": "OneBot v11 标准 action",
+  "version": "v11",
+  "actions": [
+    {
+      "name": "get_login_info",
+      "aliases": [],
+      "summary": "获取当前登录账号",
+      "readOnly": true,
+      "category": "信息",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "get_status",
+      "aliases": [],
+      "summary": "获取运行状态",
+      "readOnly": true,
+      "category": "信息",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "get_version_info",
+      "aliases": [],
+      "summary": "获取协议端版本",
+      "readOnly": true,
+      "category": "信息",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "get_stranger_info",
+      "aliases": [],
+      "summary": "获取陌生人信息",
+      "readOnly": true,
+      "category": "好友",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "integer"
+          },
+          "no_cache": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "get_friend_list",
+      "aliases": [],
+      "summary": "获取好友列表",
+      "readOnly": true,
+      "category": "好友",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "get_group_info",
+      "aliases": [],
+      "summary": "获取群信息",
+      "readOnly": true,
+      "category": "信息",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "integer"
+          },
+          "no_cache": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "group_id"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "get_group_list",
+      "aliases": [],
+      "summary": "获取群列表",
+      "readOnly": true,
+      "category": "信息",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "get_group_member_info",
+      "aliases": [],
+      "summary": "获取群成员信息",
+      "readOnly": true,
+      "category": "信息",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "integer"
+          },
+          "user_id": {
+            "type": "integer"
+          },
+          "no_cache": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "group_id",
+          "user_id"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "get_group_member_list",
+      "aliases": [],
+      "summary": "获取群成员列表",
+      "readOnly": true,
+      "category": "信息",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "group_id"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "get_msg",
+      "aliases": [],
+      "summary": "获取一条消息",
+      "readOnly": true,
+      "category": "消息",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "message_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "message_id"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "get_forward_msg",
+      "aliases": [],
+      "summary": "获取合并转发内容",
+      "readOnly": true,
+      "category": "消息",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "message_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "get_image",
+      "aliases": [],
+      "summary": "获取图片信息",
+      "readOnly": true,
+      "category": "扩展",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "file_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "get_record",
+      "aliases": [],
+      "summary": "获取语音信息",
+      "readOnly": true,
+      "category": "扩展",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "file_id": {
+            "type": "string"
+          },
+          "out_format": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "can_send_image",
+      "aliases": [],
+      "summary": "检查能否发图",
+      "readOnly": true,
+      "category": "扩展",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "can_send_record",
+      "aliases": [],
+      "summary": "检查能否发语音",
+      "readOnly": true,
+      "category": "扩展",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "send_private_msg",
+      "aliases": [],
+      "summary": "发送私聊消息",
+      "readOnly": false,
+      "category": "消息",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "integer"
+          },
+          "message": {},
+          "auto_escape": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "user_id",
+          "message"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "send_group_msg",
+      "aliases": [],
+      "summary": "发送群消息",
+      "readOnly": false,
+      "category": "消息",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "integer"
+          },
+          "message": {},
+          "auto_escape": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "group_id",
+          "message"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "send_msg",
+      "aliases": [],
+      "summary": "按会话类型发送消息",
+      "readOnly": false,
+      "category": "消息",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "message_type": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "integer"
+          },
+          "group_id": {
+            "type": "integer"
+          },
+          "message": {},
+          "auto_escape": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "send_private_forward_msg",
+      "aliases": [],
+      "summary": "发送私聊合并转发",
+      "readOnly": false,
+      "category": "消息",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "integer"
+          },
+          "messages": {
+            "type": "array"
+          }
+        },
+        "required": [
+          "user_id",
+          "messages"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "send_group_forward_msg",
+      "aliases": [],
+      "summary": "发送群合并转发",
+      "readOnly": false,
+      "category": "消息",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "integer"
+          },
+          "messages": {
+            "type": "array"
+          }
+        },
+        "required": [
+          "group_id",
+          "messages"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "delete_msg",
+      "aliases": [],
+      "summary": "撤回消息",
+      "readOnly": false,
+      "category": "消息",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "message_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "message_id"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "mark_msg_as_read",
+      "aliases": [],
+      "summary": "标记消息已读",
+      "readOnly": false,
+      "category": "消息",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "message_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "message_id"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "set_msg_emoji_like",
+      "aliases": [],
+      "summary": "给消息贴表情",
+      "readOnly": false,
+      "category": "消息",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "message_id": {
+            "type": "integer"
+          },
+          "emoji_id": {
+            "type": "string"
+          },
+          "set": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "message_id",
+          "emoji_id"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "set_group_kick",
+      "aliases": [],
+      "summary": "移出群成员",
+      "readOnly": false,
+      "category": "群管理",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "integer"
+          },
+          "user_id": {
+            "type": "integer"
+          },
+          "reject_add_request": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "group_id",
+          "user_id"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "set_group_ban",
+      "aliases": [],
+      "summary": "禁言群成员",
+      "readOnly": false,
+      "category": "群管理",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "integer"
+          },
+          "user_id": {
+            "type": "integer"
+          },
+          "duration": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "group_id",
+          "user_id",
+          "duration"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "set_group_whole_ban",
+      "aliases": [],
+      "summary": "全员禁言",
+      "readOnly": false,
+      "category": "群管理",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "integer"
+          },
+          "enable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "group_id",
+          "enable"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "set_group_admin",
+      "aliases": [],
+      "summary": "设置群管理员",
+      "readOnly": false,
+      "category": "群管理",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "integer"
+          },
+          "user_id": {
+            "type": "integer"
+          },
+          "enable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "group_id",
+          "user_id",
+          "enable"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "set_group_card",
+      "aliases": [],
+      "summary": "设置群名片",
+      "readOnly": false,
+      "category": "群管理",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "integer"
+          },
+          "user_id": {
+            "type": "integer"
+          },
+          "card": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "user_id"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "set_group_name",
+      "aliases": [],
+      "summary": "设置群名",
+      "readOnly": false,
+      "category": "群管理",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "integer"
+          },
+          "group_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "group_name"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "set_group_leave",
+      "aliases": [],
+      "summary": "退出群",
+      "readOnly": false,
+      "category": "群管理",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "integer"
+          },
+          "is_dismiss": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "group_id"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "set_group_special_title",
+      "aliases": [],
+      "summary": "设置群头衔",
+      "readOnly": false,
+      "category": "群管理",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "integer"
+          },
+          "user_id": {
+            "type": "integer"
+          },
+          "special_title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "user_id",
+          "special_title"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "set_group_add_request",
+      "aliases": [],
+      "summary": "处理加群请求",
+      "readOnly": false,
+      "category": "群管理",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "flag": {
+            "type": "string"
+          },
+          "sub_type": {
+            "type": "string"
+          },
+          "approve": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "flag",
+          "sub_type",
+          "approve"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "set_friend_add_request",
+      "aliases": [],
+      "summary": "处理加好友请求",
+      "readOnly": false,
+      "category": "好友",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "flag": {
+            "type": "string"
+          },
+          "approve": {
+            "type": "boolean"
+          },
+          "remark": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "flag",
+          "approve"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "get_group_file_url",
+      "aliases": [],
+      "summary": "获取群文件链接",
+      "readOnly": true,
+      "category": "扩展",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "integer"
+          },
+          "file_id": {
+            "type": "string"
+          },
+          "busid": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "group_id",
+          "file_id"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "upload_group_file",
+      "aliases": [],
+      "summary": "上传群文件",
+      "readOnly": false,
+      "category": "扩展",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "integer"
+          },
+          "file": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "folder": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "file"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "get_group_root_files",
+      "aliases": [],
+      "summary": "获取群文件列表",
+      "readOnly": true,
+      "category": "扩展",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "group_id"
+        ],
+        "additionalProperties": true
+      }
+    }
+  ],
+  "categories": [
+    {
+      "category": "信息",
+      "count": 7
+    },
+    {
+      "category": "好友",
+      "count": 3
+    },
+    {
+      "category": "消息",
+      "count": 10
+    },
+    {
+      "category": "群管理",
+      "count": 9
+    },
+    {
+      "category": "扩展",
+      "count": 7
+    }
+  ]
+}
