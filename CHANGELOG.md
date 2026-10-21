@@ -2,6 +2,10 @@
 
 每个版本一节 `## <版本号>`；扩展市场按节显示更新说明。
 
+## 0.1.1
+
+- 修复详情页徽标未同步：目录更新后刷新连接与 action 数量，并定期同步连接状态。
+
 ## 0.1.0
 
 - 首个版本：通过 OneBot v11 正向 WebSocket 接入 OneBot 实现（SnowLuma、NapCat、LLOneBot、Lagrange 等），覆盖全部 action 与 event。

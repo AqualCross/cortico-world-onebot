@@ -77,6 +77,7 @@ export default {
         root.append(card.el);
 
         function renderFacts(state) {
+          void ctx.refresh().catch(() => { /* Refresh connection and action-count badges. */ });
           facts.replaceChildren(ui.kv([
             { k: S.impl, v: state.impl },
             { k: S.detected, v: state.detected || '—' },
@@ -126,6 +127,7 @@ export default {
           }
         }
 
+        ctx.interval(() => { void ctx.refresh().catch(() => {}); }, 15000);
         await load();
       },
     },

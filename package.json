@@ -1,6 +1,6 @@
 {
   "name": "cortico-world-onebot",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "让TA使用QQ。连接到你的napcat或者snowluma，然后在QQ上和TA聊天吧。就像直接用QQ一样，使用几乎所有功能。",
   "license": "MIT",
