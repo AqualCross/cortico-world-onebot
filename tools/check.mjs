@@ -6,6 +6,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import definition from '../src/definition.js';
+import { configGroup } from '../src/config.js';
 import { IMPLEMENTATIONS, hasImplCatalog, loadCatalog } from '../src/catalog.js';
 import { OneBotWorld } from '../src/world.js';
 
@@ -32,6 +33,11 @@ else ok('definition.id = onebot');
 const defaults = definition.defaults();
 if (defaults.enabled !== false) bad('defaults().enabled must be false');
 else ok('defaults().enabled = false');
+
+const group = configGroup('zh');
+if (Object.hasOwn(group.schema.properties, 'worlds.onebot.enabled')) {
+  bad('enabled 由框架的 World 开关渲染，不该进配置 schema');
+} else ok('configGroup 不声明 worlds.onebot.enabled');
 
 // 每份随包发布的目录都要能读、能过基本形状检查。
 for (const impl of IMPLEMENTATIONS) {

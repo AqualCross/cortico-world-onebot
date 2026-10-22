@@ -43,8 +43,7 @@ pnpm add "D:\path\to\cortico-world-onebot" --ignore-workspace
 把 `data/extensions/node_modules/cortico-world-onebot` 做成指向本目录的目录联接，
 并自己在 `extensions/package.json` 里加 `"cortico-world-onebot": "link:D:\\path\\to\\cortico-world-onebot"`。
 
-**装完必须重启 Coopanion**：扩展是 ESM 模块，进程内不会重新加载。重启后在
-`config.json` 的 `worlds.onebot.enabled` 上打开（控制台里也有这个开关），
+**装完必须重启 Coopanion**：扩展是 ESM 模块，进程内不会重新加载。重启后在 World 页启用本 World（写 `config.json` 的 `worlds.onebot.enabled = true`），
 五个工具才会挂给桌宠。
 
 ### 一份能用的 `worlds.onebot` 长什么样

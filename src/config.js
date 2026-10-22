@@ -110,8 +110,6 @@ const ZH = {
   config: {
     title: 'OneBot',
     description: '通过 OneBot v11 正向 WebSocket 接入任意实现；action 目录来自本机同步的快照。',
-    enabled: '启用 OneBot',
-    enabledDesc: '打开后挂载本 World，连接 worlds.onebot.wsUrl。',
     implementation: '实现',
     implementationDesc: 'auto = 连上后按 get_version_info 识别对端实现，自动换用对应 action 目录；也可以指定 snowluma / napcat / onebot11 强制使用某份目录。',
     wsUrl: 'OneBot WS 地址',
@@ -158,8 +156,6 @@ const EN = {
   config: {
     title: 'OneBot',
     description: 'Any OneBot v11 implementation over a forward WebSocket; the action catalog comes from a local snapshot.',
-    enabled: 'Enable OneBot',
-    enabledDesc: 'Mount this World and connect to worlds.onebot.wsUrl.',
     implementation: 'Implementation',
     implementationDesc: 'auto = identify the implementation via get_version_info after connecting and load its action catalog; or force snowluma / napcat / onebot11.',
     wsUrl: 'OneBot WS URL',
@@ -207,12 +203,6 @@ export function configGroup(language = 'zh') {
       title: t.title,
       description: t.description,
       properties: {
-        [`${K}.enabled`]: {
-          type: 'boolean',
-          title: t.enabled,
-          description: t.enabledDesc,
-          'x-hot': true,
-        },
         [`${K}.implementation`]: {
           type: 'string',
           title: t.implementation,
