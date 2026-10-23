@@ -20,6 +20,10 @@ const TOOL_SUMMARIES = {
     zh: '按类型和时间查已归档的 OneBot 事件。',
     en: 'Read archived OneBot events by kind and time.',
   },
+  onebot_receive: {
+    zh: '查看或修改接收哪些 QQ 会话的事件。',
+    en: 'View or change which QQ conversations deliver events.',
+  },
   onebot_view_image: {
     zh: '把图片 URL 或图片 file_id 下载成模型能看的附件。',
     en: 'Download an image URL or image file_id as an attachment the model can see.',
@@ -54,6 +58,7 @@ export const onebotDefinition = {
   create: (ctx) => new OneBotWorld({
     cfg: ctx.cfg,
     timezone: ctx.timezone,
+    persist: ctx.persist,
   }),
   describe: {
     tools: describeTools(ONEBOT_TOOL_DECLS),

@@ -101,6 +101,47 @@
       }
     },
     {
+      "name": "onebot_receive",
+      "description": "Choose which QQ conversations deliver events to you. Events from unselected conversations are dropped before they are stored or shown, so they never wake you. Their history is still available through get_group_msg_history / get_friend_msg_history via onebot_call. Actions: list (default), set, add, remove. Keys are group:<id>, private:<id>, group:*, private:*, or *. Writes follow the deployment write policy; with the default confirm policy, pass confirm=true.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "list",
+              "set",
+              "add",
+              "remove"
+            ],
+            "description": "list reads the current selection; set replaces it; add appends; remove drops keys or patterns."
+          },
+          "conversations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Keys to write, e.g. [\"group:123\",\"private:456\"] or [\"*\"]. Required for set/add/remove."
+          },
+          "query": {
+            "type": "string",
+            "description": "list only: case-insensitive filter on name, id or key."
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "Set true to execute set/add/remove under the confirm write policy."
+          }
+        }
+      },
+      "tags": [
+        "act"
+      ],
+      "summary": {
+        "zh": "查看或修改接收哪些 QQ 会话的事件。",
+        "en": "View or change which QQ conversations deliver events."
+      }
+    },
+    {
       "name": "onebot_view_image",
       "description": "Download an image and return it so you can see it. Use this when a message only shows [图片], or when you have an image URL or OneBot file_id from get_image or onebot_events. Provide url, or file/file_id for a OneBot cached image.",
       "parameters": {
@@ -134,7 +175,7 @@
     },
     {
       "name": "onebot_status",
-      "description": "OneBot connection, account, catalog, and current write/event policy.",
+      "description": "OneBot connection, account, catalog, received conversations, and current write/event policy.",
       "parameters": {
         "type": "object",
         "properties": {}

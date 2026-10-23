@@ -63,3 +63,19 @@ export function eventPolicy(cfg) {
     },
   };
 }
+
+/**
+ * 「接收哪些会话」白名单：空名单不接收任何会话事件，* 接收全部。
+ * 没有会话的事件（meta_event 等）不受它管。
+ */
+export function receivePolicy(cfg) {
+  const receive = matcher(cfg?.conversations?.receive);
+  return {
+    patterns: receive.patterns,
+    all: receive.patterns.includes('*'),
+    receive(key) {
+      if (key === undefined || key === null) return true;
+      return receive.match(key);
+    },
+  };
+}

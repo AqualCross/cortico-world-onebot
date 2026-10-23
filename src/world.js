@@ -23,7 +23,8 @@ import {
 } from './config.js';
 import { STANDARD_IMPL, loadCatalog } from './catalog.js';
 import { normalizeCatalog, readCatalogSource, saveCatalog } from './catalog-update.js';
-import { actionPolicy, eventPolicy, matcher } from './policy.js';
+import { actionPolicy, eventPolicy, matcher, receivePolicy } from './policy.js';
+import { conversationOf } from './conversations.js';
 import { capText, compactJson, eventKind, renderMessage } from './render.js';
 import { downloadImage, extensionForMime, imageSourcesFromMessage } from './images.js';
 import { detectImplementation } from './implementations.js';
@@ -101,6 +102,33 @@ export const ONEBOT_TOOL_DECLS = [
     },
   },
   {
+    name: 'onebot_receive',
+    tags: ['act'],
+    description:
+      'Choose which QQ conversations deliver events to you. Events from unselected conversations are dropped '
+      + 'before they are stored or shown, so they never wake you. Their history is still available through '
+      + 'get_group_msg_history / get_friend_msg_history via onebot_call. Actions: list (default), set, add, remove. '
+      + 'Keys are group:<id>, private:<id>, group:*, private:*, or *. Writes follow the deployment write policy; '
+      + 'with the default confirm policy, pass confirm=true.',
+    parameters: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['list', 'set', 'add', 'remove'],
+          description: 'list reads the current selection; set replaces it; add appends; remove drops keys or patterns.',
+        },
+        conversations: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Keys to write, e.g. ["group:123","private:456"] or ["*"]. Required for set/add/remove.',
+        },
+        query: { type: 'string', description: 'list only: case-insensitive filter on name, id or key.' },
+        confirm: { type: 'boolean', description: 'Set true to execute set/add/remove under the confirm write policy.' },
+      },
+    },
+  },
+  {
     name: 'onebot_view_image',
     tags: ['read'],
     description:
@@ -121,7 +149,7 @@ export const ONEBOT_TOOL_DECLS = [
     name: 'onebot_status',
     tags: ['read'],
     description:
-      'OneBot connection, account, catalog, and current write/event policy.',
+      'OneBot connection, account, catalog, received conversations, and current write/event policy.',
     parameters: { type: 'object', properties: {} },
   },
 ];
@@ -136,12 +164,15 @@ export class OneBotWorld {
   #startedAt = '';
   #lastConnection = null;
   #catalog;
+  #persist;
+  #convCache = { at: 0, items: [] };
   #status = { connected: false, selfId: null, nickname: '', implementation: '' };
 
   constructor(opts = {}) {
     this.id = ID;
     this.#cfg = opts.cfg ?? {};
     this.#timezone = opts.timezone ?? '';
+    this.#persist = typeof opts.persist === 'function' ? opts.persist : null;
     this.#catalog = loadCatalog({ impl: implOf(readConfig(this.#cfg)) });
   }
 
@@ -172,6 +203,8 @@ export class OneBotWorld {
     const hint = connected
       ? (who || t.connected)
       : (this.#lastError || (this.#driver ? 'connecting' : t.disconnected));
+    const receive = receivePolicy(s);
+    const receiveWildcard = receive.patterns.some((pattern) => pattern !== '*' && pattern.includes('*'));
     return {
       label: t.label,
       lamps: [{ label: t.lamp, state, hint }],
@@ -181,14 +214,28 @@ export class OneBotWorld {
           value: connected ? t.connectedAs(impl, who) : t.disconnected,
           tone: connected ? 'on' : 'off',
         },
+        {
+          label: t.receive,
+          value: receive.all
+            ? t.receiveAll
+            : (receiveWildcard ? t.receiveCustom : t.receiveCount(receive.patterns.length)),
+          tone: receive.patterns.length ? 'on' : 'off',
+        },
         { label: t.actions, value: `${counts.enabled}/${counts.total}` },
       ],
       config: [configGroup(language)],
-      panels: [{
-        id: 'actions',
-        title: t.catalogPanelTitle,
-        description: t.catalogPanelDesc,
-      }],
+      panels: [
+        {
+          id: 'actions',
+          title: t.catalogPanelTitle,
+          description: t.catalogPanelDesc,
+        },
+        {
+          id: 'receive',
+          title: t.receivePanelTitle,
+          description: t.receivePanelDesc,
+        },
+      ],
       invoke: (panel, method, args) => this.#invokePanel(panel, method, args ?? []),
       promptDocs: [{
         key: `worlds.${ID}.env`,
@@ -200,12 +247,19 @@ export class OneBotWorld {
     };
   }
 
-  /** 控制台「动作目录」面板的数据面：读状态、按需更新。 */
+  /** 控制台面板的数据面：动作目录读状态/更新；接收的会话读状态/保存。 */
   async #invokePanel(panel, method, args) {
-    if (panel !== 'actions') throw new Error(`unknown panel: ${panel}`);
-    if (method === 'state') return this.#catalogState();
-    if (method === 'update') return await this.#updateCatalog(args[0], args[1]);
-    throw new Error(`unknown method: ${panel}.${method}`);
+    if (panel === 'actions') {
+      if (method === 'state') return this.#catalogState();
+      if (method === 'update') return await this.#updateCatalog(args[0], args[1]);
+      throw new Error(`unknown method: ${panel}.${method}`);
+    }
+    if (panel === 'receive') {
+      if (method === 'state') return await this.#receiveState(args[0] === true);
+      if (method === 'save') return await this.#saveReceive(args[0]);
+      throw new Error(`unknown method: ${panel}.${method}`);
+    }
+    throw new Error(`unknown panel: ${panel}`);
   }
 
   #catalogState() {
@@ -248,6 +302,7 @@ export class OneBotWorld {
     this.#startedAt = nowIso();
     this.#lastConnection = null;
     this.#lastError = '';
+    this.#convCache = { at: 0, items: [] };
 
     const s = this.#settings;
     const token = String(process.env.ONEBOT_TOKEN ?? '').trim() || String(s.token ?? '');
@@ -268,6 +323,7 @@ export class OneBotWorld {
     });
     driver.onReady((idn) => {
       this.#lastError = '';
+      this.#convCache = { at: 0, items: [] };
       this.#status = {
         connected: true,
         selfId: idn?.selfId ?? null,
@@ -280,6 +336,7 @@ export class OneBotWorld {
     driver.onStatus((status) => {
       if (status.connected) return;
       this.#lastError = status.error || 'disconnected';
+      this.#convCache = { at: 0, items: [] };
       this.#status = { ...this.#status, connected: false };
       this.#pushConnection(false, null, status.error);
     });
@@ -292,6 +349,7 @@ export class OneBotWorld {
     this.#driver = null;
     this.#host = null;
     this.#lastConnection = null;
+    this.#convCache = { at: 0, items: [] };
     if (driver) await driver.stop();
   }
 
@@ -328,6 +386,7 @@ export class OneBotWorld {
         case 'onebot_actions': return this.#toolActions(args);
         case 'onebot_call': return await this.#toolCall(args);
         case 'onebot_events': return this.#toolEvents(args);
+        case 'onebot_receive': return await this.#toolReceive(args);
         case 'onebot_view_image': return await this.#toolViewImage(args);
         case 'onebot_status': return this.#toolStatus();
         default: return fail(`[onebot] unknown tool: ${name}`);
@@ -473,6 +532,180 @@ export class OneBotWorld {
     return JSON.stringify({ count: events.length, events }, null, 2);
   }
 
+  async #toolReceive(args) {
+    const s = this.#settings;
+    const action = args.action === undefined ? 'list' : String(args.action).trim().toLowerCase();
+    if (!['list', 'set', 'add', 'remove'].includes(action)) {
+      return fail(`[bad input] unknown action: ${action}; use list, set, add or remove.`);
+    }
+
+    const policy = receivePolicy(s);
+    if (action === 'list') {
+      const configured = configuredItems(policy);
+      let available = [];
+      let error = '';
+      if (this.#driver?.connected) {
+        try {
+          available = await this.#availableConversations(false);
+        } catch (err) {
+          error = err instanceof Error ? err.message : String(err);
+        }
+      } else {
+        error = 'OneBot is not connected; only the current receive list is shown.';
+      }
+      const items = mergeItems(available, configured, policy);
+      const query = typeof args.query === 'string' ? args.query.trim().toLowerCase() : '';
+      const matched = query
+        ? items.filter((item) => `${item.key} ${item.name} ${item.id}`.toLowerCase().includes(query))
+        : items;
+      const cap = 200;
+      return JSON.stringify({
+        connected: this.#driver?.connected === true,
+        receive: policy.patterns,
+        all: policy.all,
+        total: matched.length,
+        truncated: matched.length > cap,
+        conversations: matched.slice(0, cap),
+        ...(error ? { error } : {}),
+      }, null, 2);
+    }
+
+    if (s.actions.readOnly === true) {
+      return fail('[read-only] this deployment does not allow writes.');
+    }
+    if (s.actions.writePolicy === 'deny') {
+      return fail('[denied] this deployment does not allow writes.');
+    }
+    if (!Array.isArray(args.conversations) && typeof args.conversations !== 'string') {
+      return fail('[bad input] conversations is required for set, add and remove.');
+    }
+    let keys;
+    try {
+      keys = normalizeReceiveKeys(args.conversations);
+    } catch (err) {
+      return fail(`[bad input] ${err instanceof Error ? err.message : String(err)}`);
+    }
+    if (action !== 'set' && !keys.length) {
+      return fail('[bad input] conversations is required for add and remove.');
+    }
+    if (s.actions.writePolicy === 'confirm' && args.confirm !== true) {
+      return `[confirm required] onebot_receive ${action} changes which conversations deliver events.\n`
+        + `conversations: ${keys.length ? keys.join(', ') : '(none)'}\n`
+        + 'Call again with confirm=true to apply it.';
+    }
+
+    try {
+      let next;
+      if (action === 'set') next = keys;
+      else if (action === 'add') next = addReceive(policy.patterns, keys);
+      else next = await this.#removeReceive(policy.patterns, keys);
+      const stored = next.includes('*') ? '*' : next.join(', ');
+      this.#writeReceive(stored);
+      return JSON.stringify({
+        ok: true,
+        action,
+        receive: patterns(stored),
+        all: stored === '*',
+        ...(next.length ? {} : { note: 'No conversations are received now.' }),
+      }, null, 2);
+    } catch (err) {
+      return fail(`[onebot_receive failed] ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  async #receiveState(refresh = false) {
+    const policy = receivePolicy(this.#settings);
+    const configured = configuredItems(policy).map((item) => ({ ...item, received: true }));
+    let items = configured;
+    let error = '';
+    if (this.#driver?.connected) {
+      try {
+        items = mergeItems(await this.#availableConversations(refresh === true), configured, policy);
+      } catch (err) {
+        error = err instanceof Error ? err.message : String(err);
+      }
+    }
+    return {
+      connected: this.#driver?.connected === true,
+      receive: policy.patterns,
+      all: policy.all,
+      items,
+      ...(error ? { error } : {}),
+    };
+  }
+
+  async #saveReceive(value) {
+    if (!Array.isArray(value) && typeof value !== 'string') {
+      throw new Error('conversations must be an array of keys');
+    }
+    const keys = normalizeReceiveKeys(value);
+    const stored = keys.includes('*') ? '*' : keys.join(', ');
+    this.#writeReceive(stored);
+    return { ...(await this.#receiveState(false)), saved: stored };
+  }
+
+  #writeReceive(value) {
+    this.#persist?.({ conversations: { receive: value } });
+    if (!this.#cfg.conversations || typeof this.#cfg.conversations !== 'object') {
+      this.#cfg.conversations = {};
+    }
+    this.#cfg.conversations.receive = value;
+    this.#log?.info?.('receive updated', { receive: value });
+    return value;
+  }
+
+  async #availableConversations(refresh) {
+    const driver = this.#driver;
+    if (!driver?.connected) throw new Error('OneBot is not connected.');
+    if (!refresh && this.#convCache.at && Date.now() - this.#convCache.at < 60_000) {
+      return this.#convCache.items;
+    }
+    const [groups, friends] = await Promise.all([
+      driver.callSafe('get_group_list', {}),
+      driver.callSafe('get_friend_list', {}),
+    ]);
+    if (!groups.ok) throw new Error(`get_group_list failed: ${groups.error}`);
+    if (!friends.ok) throw new Error(`get_friend_list failed: ${friends.error}`);
+
+    const items = [];
+    const seen = new Set();
+    const add = (kind, rawId, name) => {
+      const id = Number(rawId);
+      if (!Number.isSafeInteger(id) || id <= 0) return;
+      const key = `${kind}:${id}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      items.push({ key, kind, id, name: String(name || id) });
+    };
+    for (const group of listOf(groups.data, 'groups')) {
+      add('group', group?.group_id, group?.group_name);
+    }
+    for (const friend of listOf(friends.data, 'friends')) {
+      add('private', friend?.user_id, friend?.remark || friend?.nickname);
+    }
+    items.sort((a, b) => a.name.localeCompare(b.name, 'zh') || a.id - b.id);
+    this.#convCache = { at: Date.now(), items };
+    return items;
+  }
+
+  async #removeReceive(current, removals) {
+    const needsList = current.includes('*')
+      || current.some((pattern) => pattern !== '*' && pattern.includes('*'));
+    let base;
+    if (needsList) {
+      const available = await this.#availableConversations(true);
+      const currentMatch = matcher(current);
+      base = available.filter((item) => currentMatch.match(item.key)).map((item) => item.key);
+      for (const pattern of current) {
+        if (!pattern.includes('*') && !base.includes(pattern)) base.push(pattern);
+      }
+    } else {
+      base = [...current];
+    }
+    const remove = matcher(removals);
+    return base.filter((key) => !remove.match(key));
+  }
+
   async #toolViewImage(args) {
     const driver = this.#driver;
     if (!driver) return fail('[not started] OneBot World is not running.');
@@ -543,6 +776,10 @@ export class OneBotWorld {
         mute: patterns(s.events.mute),
         drop: patterns(s.events.drop),
       },
+      conversations: {
+        receive: patterns(s.conversations.receive),
+        all: receivePolicy(s).all,
+      },
       lastError: this.#lastError,
       startedAt: this.#startedAt,
     }, null, 2);
@@ -553,6 +790,9 @@ export class OneBotWorld {
     if (!host) return;
 
     const s = this.#settings;
+    const conv = conversationOf(ev);
+    if (conv && !receivePolicy(s).receive(conv.key)) return;
+
     const policy = eventPolicy(s);
     const kind = eventKind(ev);
     if (policy.drop(kind)) return;
@@ -570,14 +810,7 @@ export class OneBotWorld {
     );
 
     const meta = { kind, raw: ev, ...(isSelf ? { self: true } : {}) };
-    if (isMessage) {
-      const conv = ev.message_type === 'group'
-        ? { kind: 'group', id: Number(ev.group_id) }
-        : ev.message_type === 'private'
-          ? { kind: 'private', id: Number(ev.user_id) }
-          : null;
-      if (conv && Number.isFinite(conv.id)) meta.conv = conv;
-    }
+    if (conv) meta.conv = { kind: conv.kind, id: conv.id };
 
     const blobs = isMessage ? await this.#downloadMessageImages(ev, host, s) : [];
     host.pushEvent({
@@ -673,6 +906,58 @@ export class OneBotWorld {
       host.log?.warn?.('connection event push failed', { error: String(err) });
     });
   }
+}
+
+const RECEIVE_KEY = /^(?:group|private):(?:\*|\d+)$/;
+
+/** 接收名单只接受会话键或 *；返回去重后的键，含 * 时只剩 *。 */
+function normalizeReceiveKeys(value) {
+  const keys = [];
+  for (const raw of patterns(value)) {
+    const key = raw.toLowerCase();
+    if (key === '*') return ['*'];
+    if (!RECEIVE_KEY.test(key)) {
+      throw new Error(`invalid conversation key: ${raw}; use group:<id>, private:<id>, group:*, private:*, or *`);
+    }
+    if (!keys.includes(key)) keys.push(key);
+  }
+  return keys;
+}
+
+/** 名单里能落到具体会话的键；通配符不展开。 */
+function configuredItems(policy) {
+  const items = [];
+  const seen = new Set();
+  for (const pattern of policy.patterns) {
+    const match = /^(group|private):(\d+)$/.exec(pattern);
+    if (!match) continue;
+    const id = Number(match[2]);
+    const key = `${match[1]}:${id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push({ key, kind: match[1], id, name: '' });
+  }
+  return items;
+}
+
+function mergeItems(available, configured, policy) {
+  const seen = new Set(available.map((item) => item.key));
+  const items = available.map((item) => ({ ...item, received: policy.receive(item.key) }));
+  for (const item of configured) {
+    if (!seen.has(item.key)) items.push({ ...item, received: true });
+  }
+  return items;
+}
+
+function addReceive(current, keys) {
+  if (current.includes('*') || keys.includes('*')) return ['*'];
+  return [...new Set([...current, ...keys])];
+}
+
+function listOf(data, key) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.[key])) return data[key];
+  return [];
 }
 
 /** auto 在加载目录前必须先解析成具体实现，否则没有文件可读。 */

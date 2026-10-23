@@ -23,6 +23,31 @@ async function waitFor(fn, timeoutMs = 3000) {
   throw new Error('waitFor timeout');
 }
 
+function groupMessage(groupId, messageId, text) {
+  return {
+    post_type: 'message',
+    message_type: 'group',
+    group_id: groupId,
+    user_id: 456,
+    message_id: messageId,
+    time: 1700000000 + messageId,
+    sender: { nickname: 'Alice' },
+    message: [{ type: 'text', data: { text } }],
+  };
+}
+
+function privateMessage(userId, messageId, text) {
+  return {
+    post_type: 'message',
+    message_type: 'private',
+    user_id: userId,
+    message_id: messageId,
+    time: 1700000000 + messageId,
+    sender: { nickname: 'Alice' },
+    message: [{ type: 'text', data: { text } }],
+  };
+}
+
 function makeHost(events) {
   const logger = {
     trace() {}, debug() {}, info() {}, warn() {}, error() {}, emit() {},
@@ -70,6 +95,11 @@ test('OneBot World: connection, action dispatcher, write gate, raw event archive
       if (request.action === 'get_login_info') data = { user_id: 10001, nickname: 'Bot' };
       else if (request.action === 'get_version_info') data = { app_name: 'SnowLuma', app_version: 'test' };
       else if (request.action === 'get_group_info') data = { group_id: request.params.group_id, group_name: 'Test Group' };
+      else if (request.action === 'get_group_list') data = [
+        { group_id: 123, group_name: 'Test Group' },
+        { group_id: 999, group_name: 'Noisy Group' },
+      ];
+      else if (request.action === 'get_friend_list') data = [{ user_id: 456, nickname: 'Alice' }];
       else if (request.action === 'send_group_msg') data = { message_id: 9001 };
       else data = {};
       socket.send(JSON.stringify({ status: 'ok', retcode: 0, data, echo: request.echo }));
@@ -190,4 +220,89 @@ test('OneBot World: connection, action dispatcher, write gate, raw event archive
   // 控制台的连接徽标要说出连的是哪个实现，而不只是“已连接”。
   const badge = world.webUi('zh').badges.find((item) => item.label === '连接');
   assert.equal(badge.value, 'snowluma：Bot');
+
+  // 接收名单：默认全收；切换后未接收的会话在事件泵入口被丢弃，不落事件库。
+  const receiveList = JSON.parse(await tools.onebot_receive.handler({}, {}));
+  assert.equal(receiveList.connected, true);
+  assert.deepEqual(receiveList.receive, ['*']);
+  assert.equal(receiveList.all, true);
+  assert.deepEqual(
+    receiveList.conversations.map((item) => item.key).sort(),
+    ['group:123', 'group:999', 'private:456'],
+  );
+  assert.ok(receiveList.conversations.every((item) => item.received));
+
+  const stagedReceive = await tools.onebot_receive.handler({
+    action: 'set',
+    conversations: ['group:123'],
+  }, {});
+  assert.match(stagedReceive, /^\[confirm required\]/);
+
+  const setReceive = JSON.parse(await tools.onebot_receive.handler({
+    action: 'set',
+    conversations: ['group:123'],
+    confirm: true,
+  }, {}));
+  assert.deepEqual(setReceive.receive, ['group:123']);
+
+  server.send(JSON.stringify(groupMessage(999, 888, 'noisy group')));
+  server.send(JSON.stringify(privateMessage(456, 889, 'private')));
+  server.send(JSON.stringify({
+    post_type: 'notice',
+    notice_type: 'group_recall',
+    group_id: 999,
+    user_id: 456,
+    message_id: 888,
+    time: 1700000888,
+  }));
+  server.send(JSON.stringify(groupMessage(123, 890, 'kept')));
+
+  await waitFor(() => events.some((event) => (
+    event.type === 'onebot.message' && event.meta.raw.message_id === 890
+  )));
+  await tick(100);
+  assert.equal(events.some((event) => event.meta?.raw?.message_id === 888), false);
+  assert.equal(events.some((event) => event.meta?.raw?.message_id === 889), false);
+  assert.equal(events.some((event) => event.meta?.kind === 'notice/group_recall'), false);
+
+  // 从「全部」里移除一个，存成显式名单；之后这个群不再产生事件。
+  await tools.onebot_receive.handler({ action: 'set', conversations: ['*'], confirm: true }, {});
+  const removed = JSON.parse(await tools.onebot_receive.handler({
+    action: 'remove',
+    conversations: ['group:999'],
+    confirm: true,
+  }, {}));
+  assert.deepEqual(removed.receive.slice().sort(), ['group:123', 'private:456']);
+
+  server.send(JSON.stringify(groupMessage(999, 891, 'still noisy')));
+  server.send(JSON.stringify(groupMessage(123, 892, 'still kept')));
+  await waitFor(() => events.some((event) => (
+    event.type === 'onebot.message' && event.meta.raw.message_id === 892
+  )));
+  await tick(100);
+  assert.equal(events.some((event) => event.meta?.raw?.message_id === 891), false);
+
+  const statusAfter = JSON.parse(await tools.onebot_status.handler({}, {}));
+  assert.deepEqual(statusAfter.conversations.receive.slice().sort(), ['group:123', 'private:456']);
+  assert.equal(statusAfter.conversations.all, false);
+});
+
+test('onebot_receive: readOnly and deny block writes without a connection', async () => {
+  for (const [cfg, pattern] of [
+    [{ actions: { readOnly: true } }, /\[read-only\]/],
+    [{ actions: { writePolicy: 'deny' } }, /\[denied\]/],
+  ]) {
+    const world = new OneBotWorld({ cfg });
+    const tool = world.tools().find((item) => item.name === 'onebot_receive');
+    const result = await tool.handler({ action: 'set', conversations: ['group:123'], confirm: true }, {});
+    assert.equal(result.failed, true);
+    assert.match(result.text, pattern);
+  }
+
+  const world = new OneBotWorld({ cfg: {} });
+  const tool = world.tools().find((item) => item.name === 'onebot_receive');
+  const list = JSON.parse(await tool.handler({}, {}));
+  assert.equal(list.connected, false);
+  assert.deepEqual(list.receive, ['*']);
+  assert.equal(list.error, 'OneBot is not connected; only the current receive list is shown.');
 });

@@ -51,6 +51,10 @@ export const DEFAULTS = Object.freeze({
     /** 完全丢弃 */
     drop: 'meta_event/heartbeat',
   },
+  conversations: {
+    /** 接收哪些会话：group:<群号> / private:<QQ号>，支持 *；空 = 不接收任何会话事件。 */
+    receive: '*',
+  },
   images: {
     /** 收到消息时自动下载图片，作为 blobs 交给模型 */
     download: true,
@@ -78,6 +82,7 @@ export function readConfig(cfg = {}) {
   const raw = cfg && typeof cfg === 'object' ? cfg : {};
   const actions = raw.actions && typeof raw.actions === 'object' ? raw.actions : {};
   const events = raw.events && typeof raw.events === 'object' ? raw.events : {};
+  const conversations = raw.conversations && typeof raw.conversations === 'object' ? raw.conversations : {};
   const images = raw.images && typeof raw.images === 'object' ? raw.images : {};
   const writePolicy = ['confirm', 'allow', 'deny'].includes(actions.writePolicy)
     ? actions.writePolicy
@@ -91,6 +96,7 @@ export function readConfig(cfg = {}) {
     implementation,
     actions: { ...DEFAULTS.actions, ...actions, writePolicy },
     events: { ...DEFAULTS.events, ...events },
+    conversations: { ...DEFAULTS.conversations, ...conversations },
     images: { ...DEFAULTS.images, ...images },
   };
 }
@@ -100,6 +106,12 @@ const ZH = {
   lamp: 'OneBot',
   connection: '连接',
   actions: 'Action',
+  receive: '接收',
+  receiveAll: '全部会话',
+  receiveCustom: '自定义规则',
+  receiveCount: (n) => `${n} 个会话`,
+  receivePanelTitle: '接收的会话',
+  receivePanelDesc: '勾选要接收的会话；未勾选的消息和通知不送达，也不落盘。',
   connected: '已连接',
   disconnected: '未连接',
   connectedAs: (impl, who) => (who ? `${impl}：${who}` : impl),
@@ -146,6 +158,12 @@ const EN = {
   lamp: 'OneBot',
   connection: 'Connection',
   actions: 'Actions',
+  receive: 'Receive',
+  receiveAll: 'all conversations',
+  receiveCustom: 'custom rules',
+  receiveCount: (n) => (n === 1 ? '1 conversation' : `${n} conversations`),
+  receivePanelTitle: 'Received conversations',
+  receivePanelDesc: 'Only checked conversations deliver events; messages and notices from the rest are not stored or delivered.',
   connected: 'connected',
   disconnected: 'disconnected',
   connectedAs: (impl, who) => (who ? `${impl}: ${who}` : impl),

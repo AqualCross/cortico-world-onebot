@@ -6,13 +6,14 @@
 
 ## 功能
 
-装好后，桌宠会多出五个工具，覆盖几乎所有 QQ 功能：
+装好后，桌宠会多出六个工具，覆盖几乎所有 QQ 功能：
 
 | 工具 | 作用 |
 | --- | --- |
 | `onebot_actions` | 搜索和查看所有可用功能（约 200 个） |
 | `onebot_call` | 调用任意功能：发消息、发图、撤回、群管…… |
 | `onebot_events` | 查看历史事件和通知 |
+| `onebot_receive` | 查看或修改接收哪些 QQ 会话 |
 | `onebot_view_image` | 下载图片给模型查看 |
 | `onebot_status` | 查看连接状态和配置 |
 
@@ -67,6 +68,9 @@ pnpm add "D:\path\to\cortico-world-onebot" --ignore-workspace
         "mute": "meta_event/*",
         "drop": "meta_event/heartbeat"
       },
+      "conversations": {
+        "receive": "*"
+      },
       "images": {
         "download": true
       }
@@ -94,6 +98,7 @@ pnpm add "D:\path\to\cortico-world-onebot" --ignore-workspace
 | `events.deliver` | `*` | 归档并唤醒；逗号/换行分隔，支持 `*` |
 | `events.mute` | `meta_event/*` | 归档但不唤醒，仍可用 `onebot_events` 查 |
 | `events.drop` | `meta_event/heartbeat` | 完全不收；优先级高于 mute 和 deliver |
+| `conversations.receive` | `*` | 接收哪些会话：`group:<群号>`、`private:<QQ号>`，支持 `group:*` / `private:*` / `*`；空 = 不接收任何会话事件。通常用控制台面板或 `onebot_receive` 修改 |
 | `images.download` | `true` | 收到消息时下载图片，作为 `blobs` 交给模型 |
 | `images.timeoutMs` | `10000` | 单张图片下载时限 |
 | `images.maxImageBytes` | `10485760` | 单张图片字节上限 |
@@ -111,6 +116,19 @@ meta_event/*                所有 meta 事件
 ```
 
 被禁用的 action 不会出现在 `onebot_actions` 的查询结果里，也查不到它的文档——对模型来说它等同于不存在。配置本身在控制台和 `config.json` 里照常可见。
+
+## 接收的会话
+
+默认接收全部会话（`conversations.receive = "*"`）。改成一份名单后，只有名单里的群和好友会产生事件；其余会话的消息、撤回、戳一戳等通知在事件泵入口直接丢弃，不渲染、不下载图片、不写事件库，也不唤醒模型。
+
+名单有两种改法：
+
+- 控制台「接收的会话」页签：从群列表和好友列表里勾选，支持搜索和全选，保存后立刻生效；
+- `onebot_receive` 工具：`list` 看当前名单和可选会话，`set` 整体替换，`add` / `remove` 增加或移除。写入遵循 `actions.readOnly` 与 `actions.writePolicy`；默认 `confirm` 策略下需要 `confirm: true`。
+
+全选表示 `*`，以后新增的群和好友也会接收。只勾选一部分时保存的是当前列表，之后新增的会话默认不接收。
+
+没接收的会话仍可用 `onebot_call` 调 `get_group_msg_history` / `get_friend_msg_history` 查 QQ 自己的消息记录，不依赖本地事件库。
 
 ## 密钥
 
@@ -201,7 +219,7 @@ meta_event/*                所有 meta 事件
 ## Event 面
 
 - `onebot.message`：QQ 消息。正文是一行可读文本，`meta.raw` 是原始事件，`meta.conv` 是 `{kind,id}`。消息里的图片在模型接受 `image/*` 时会自动下载并以 `blobs` 附加；否则保留 `[图片]` 占位，可用 `onebot_view_image` 补看。
-- `onebot.event`：其他 OneBot 事件（notice/request/meta_event 等）。正文是 `[kind] <json>`，`meta.raw` 是原始事件。
+- `onebot.event`：其他 OneBot 事件（notice/request/meta_event 等）。正文是 `[kind] <json>`，`meta.raw` 是原始事件；群通知和请求带 `meta.conv`。
 - `onebot.connection`：连接建立/断开。
 
 没有 `group_recall`、`poke`、`group_increase` 这些专用事件类型。它们都在 `onebot.event` 里，`meta.kind` 区分；想让某类事件唤醒模型，改 `events.deliver` 即可，不用改代码。
@@ -217,6 +235,21 @@ meta_event/*                所有 meta 事件
 
 `raw` 默认 `true`，返回 `meta.raw` 里的原始 OneBot 事件；设为 `false` 只返回摘要。
 
+### `onebot_receive`
+
+查看或修改接收名单：
+
+```json
+{ "action": "list" }
+{ "action": "set", "conversations": ["group:123", "private:456"], "confirm": true }
+{ "action": "add", "conversations": ["group:789"], "confirm": true }
+{ "action": "remove", "conversations": ["group:999"], "confirm": true }
+```
+
+`list` 返回当前名单和可选的群/好友（带 `received` 标记），可用 `query` 按名字、号码或会话键过滤，最多返回 200 项。`set` 整体替换，`add` 追加，`remove` 移除；键支持 `group:<群号>`、`private:<QQ号>`、`group:*`、`private:*` 和 `*`。写入生效后，未接收的会话立即停止产生事件。
+
+写入遵循 `actions.readOnly` 与 `actions.writePolicy`：只读或 `deny` 时拒绝，默认 `confirm` 时要求 `confirm: true`。
+
 ### `onebot_view_image`
 
 把一张图下载成模型能看的附件：
@@ -230,12 +263,18 @@ meta_event/*                所有 meta 事件
 
 ## 控制台页
 
-除了配置表单和提示词页，还有一个**动作目录**页签：
+除了配置表单和提示词页，还有两个页签：
+
+**动作目录**
 
 - 上半部分列出当前生效的目录：实现、对端识别结果、目录来源与版本、动作数、分类数、被禁用数；
 - 下半部分是「更新动作」按钮：填好目录地址（NapCat 默认 `http://127.0.0.1:6099/api/Debug/schemas`）和 WebUI token，点一下就从运行中的实现重新拉一份，落盘到 `src/catalogs/<实现>.json` 并在当前进程里立即生效。
 
 拉不到就保持现状，只把错误显示在按钮下方。不需要终端，也不需要重启。
+
+**接收的会话**
+
+从群列表和好友列表里勾选要接收的会话，支持搜索、全选和刷新列表。保存后写入 `conversations.receive` 并立即生效。全选存 `*`，包含以后新增的会话；只勾选一部分时存当前列表。没有勾选任何会话时所有 QQ 消息和通知都会被丢弃。
 
 ## 维护者：重新生成目录
 
@@ -290,17 +329,18 @@ cortico-world-onebot/
 │  ├─ config.js        # 配置默认值、WebUI 表单、文案
 │  ├─ catalog.js       # 目录加载：按实现选文件、兜底标准目录
 │  ├─ catalog-update.js # 目录的拉取、归一化与落盘（面板与脚本共用）
-│  ├─ webui/client.js  # 「动作目录」页签的浏览器 bundle
+│  ├─ webui/client.js  # 「动作目录」「接收的会话」两个页签的浏览器 bundle
+│  ├─ conversations.js # 会话键推导：group:<群号> / private:<QQ号>
 │  ├─ catalogs/
 │  │  ├─ onebot11.json # 本包维护的 OneBot v11 标准 action
 │  │  ├─ snowluma.json # 从 @snowluma/mcp 生成的 SnowLuma 目录
 │  │  └─ napcat.json   # 本机生成（sync-catalog --impl napcat）
-│  ├─ policy.js        # disabled / mute / drop 匹配
+│  ├─ policy.js        # disabled / mute / drop / receive 匹配
 │  ├─ render.js        # 消息可读化 + 事件兜底
 │  ├─ images.js        # 图片下载与 MIME
 │  ├─ implementations.js # 按 get_version_info 识别对端实现
 │  ├─ driver.js        # OneBot WS、echo、重连、超时
-│  ├─ world.js         # 五个工具 + 事件泵 + promptDocs 声明
+│  ├─ world.js         # 六个工具 + 事件泵 + promptDocs 声明
 │  └─ ENV_PROMPT.md    # 环境提示词模板（可被部署目录 worlds/onebot/ENV_PROMPT.md 覆盖）
 ├─ tools/
 │  ├─ check.mjs        # 离线自检

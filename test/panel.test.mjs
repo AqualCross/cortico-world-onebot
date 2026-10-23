@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 import { OneBotWorld } from '../src/world.js';
+import { onebotDefinition } from '../src/definition.js';
 import { normalizeCatalog } from '../src/catalog-update.js';
 
 const NAPCAT_SHAPE = {
@@ -64,7 +65,7 @@ test('panel: state 报当前目录，update 拉取后换掉目录', async () => 
   try {
     const world = new OneBotWorld({ cfg: { implementation: 'napcat' } });
     const ui = world.webUi('zh');
-    assert.deepEqual(ui.panels.map((panel) => panel.id), ['actions']);
+    assert.deepEqual(ui.panels.map((panel) => panel.id), ['actions', 'receive']);
 
     const state = await ui.invoke('actions', 'state', []);
     assert.equal(state.impl, 'napcat');
@@ -85,4 +86,39 @@ test('panel: state 报当前目录，update 拉取后换掉目录', async () => 
     await new Promise((resolve) => server.close(resolve));
     writeFileSync(target, before);
   }
+});
+
+test('panel: receive state and save, including persist wiring', async () => {
+  const world = new OneBotWorld({ cfg: {} });
+  const ui = world.webUi('zh');
+
+  const state = await ui.invoke('receive', 'state', []);
+  assert.equal(state.connected, false);
+  assert.deepEqual(state.receive, ['*']);
+  assert.equal(state.all, true);
+  assert.deepEqual(state.items, []);
+
+  const saved = await ui.invoke('receive', 'save', [['group:123', 'private:456']]);
+  assert.equal(saved.saved, 'group:123, private:456');
+  assert.deepEqual(saved.receive, ['group:123', 'private:456']);
+  assert.equal(saved.all, false);
+  assert.deepEqual(saved.items.map((item) => item.key), ['group:123', 'private:456']);
+
+  const all = await ui.invoke('receive', 'save', [['*']]);
+  assert.equal(all.saved, '*');
+  assert.equal(all.all, true);
+  await assert.rejects(() => ui.invoke('receive', 'save', [['nope']]), /invalid conversation key/);
+  await assert.rejects(() => ui.invoke('receive', 'save', [42]), /must be an array/);
+
+  // definition.create 必须把下发的 persist 接到 World 上，否则模型/面板写入活配置却落不了盘。
+  const persisted = {};
+  const fromDefinition = onebotDefinition.create({
+    cfg: {},
+    timezone: 'UTC',
+    persist: (patch) => {
+      persisted.conversations = { ...(persisted.conversations ?? {}), ...patch.conversations };
+    },
+  });
+  await fromDefinition.webUi('zh').invoke('receive', 'save', [['group:123']]);
+  assert.deepEqual(persisted.conversations, { receive: 'group:123' });
 });
