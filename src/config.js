@@ -58,9 +58,15 @@ export const DEFAULTS = Object.freeze({
   images: {
     /** 收到消息时自动下载图片，作为 blobs 交给模型 */
     download: true,
+    /** 允许从环回/内网地址下载；图片服务在本机或内网时打开 */
+    allowPrivateHosts: false,
     timeoutMs: 10000,
     maxImageBytes: 10 * 1024 * 1024,
     maxPerMessage: 4,
+  },
+  files: {
+    /** 换行分隔的绝对路径；空 = 拒绝所有本地文件读取。通常用控制台「读取路径」页修改 */
+    readPaths: '',
   },
   /** 非消息事件的正文上限；原始 JSON 仍在 meta.raw 里 */
   maxEventChars: 4000,
@@ -84,6 +90,7 @@ export function readConfig(cfg = {}) {
   const events = raw.events && typeof raw.events === 'object' ? raw.events : {};
   const conversations = raw.conversations && typeof raw.conversations === 'object' ? raw.conversations : {};
   const images = raw.images && typeof raw.images === 'object' ? raw.images : {};
+  const files = raw.files && typeof raw.files === 'object' ? raw.files : {};
   const writePolicy = ['confirm', 'allow', 'deny'].includes(actions.writePolicy)
     ? actions.writePolicy
     : DEFAULTS.actions.writePolicy;
@@ -98,6 +105,7 @@ export function readConfig(cfg = {}) {
     events: { ...DEFAULTS.events, ...events },
     conversations: { ...DEFAULTS.conversations, ...conversations },
     images: { ...DEFAULTS.images, ...images },
+    files: { ...DEFAULTS.files, ...files },
   };
 }
 
@@ -107,6 +115,9 @@ const ZH = {
   connection: '连接',
   actions: 'Action',
   receive: '接收',
+  readPaths: '读取路径',
+  readPathsBlocked: '禁止本地文件',
+  readPathsCount: (n) => `${n} 个路径`,
   receiveAll: '全部会话',
   receiveCustom: '自定义规则',
   receiveCount: (n) => `${n} 个会话`,
@@ -116,7 +127,9 @@ const ZH = {
   disconnected: '未连接',
   connectedAs: (impl, who) => (who ? `${impl}：${who}` : impl),
   catalogPanelTitle: '动作目录',
-  catalogPanelDesc: '看当前生效的 action 目录，需要时从实现对端重新拉一份。',
+  catalogPanelDesc: '看当前生效的 action 目录，勾选模型可以调用的动作，需要时从实现对端重新拉一份。',
+  readPathsPanelTitle: '读取路径',
+  readPathsPanelDesc: '动作只能读取这些目录或文件里的本地内容；未列出的一律拒绝。',
   promptTitle: '提示词',
   prompt: '',
   config: {
@@ -146,6 +159,8 @@ const ZH = {
     maxEventCharsDesc: '非消息事件正文的最大字符数；原始 JSON 仍保存在 meta.raw。',
     downloadImages: '自动下载图片',
     downloadImagesDesc: '收到消息时下载图片并作为附件交给模型；关闭后只显示 [图片] 占位。',
+    allowPrivateHosts: '允许内网图片地址',
+    allowPrivateHostsDesc: '允许从环回和内网地址下载或发送图片，包括 action 参数里交给实现对端拉取的 URL；默认拒绝。图片服务在本机或内网时打开。',
     imageTimeout: '图片下载超时',
     imageTimeoutDesc: '单张图片的下载时限，单位毫秒。',
     imageMaxBytes: '图片大小上限',
@@ -159,6 +174,9 @@ const EN = {
   connection: 'Connection',
   actions: 'Actions',
   receive: 'Receive',
+  readPaths: 'Read paths',
+  readPathsBlocked: 'local files blocked',
+  readPathsCount: (n) => (n === 1 ? '1 path' : `${n} paths`),
   receiveAll: 'all conversations',
   receiveCustom: 'custom rules',
   receiveCount: (n) => (n === 1 ? '1 conversation' : `${n} conversations`),
@@ -168,7 +186,9 @@ const EN = {
   disconnected: 'disconnected',
   connectedAs: (impl, who) => (who ? `${impl}: ${who}` : impl),
   catalogPanelTitle: 'Action catalog',
-  catalogPanelDesc: 'Shows the catalog in effect and re-fetches it from the implementation on demand.',
+  catalogPanelDesc: 'Shows the catalog in effect, which actions the model may call, and re-fetches it from the implementation on demand.',
+  readPathsPanelTitle: 'Read paths',
+  readPathsPanelDesc: 'Actions may only read local files under these directories; everything else is refused.',
   promptTitle: 'Prompt',
   prompt: '',
   config: {
@@ -198,6 +218,8 @@ const EN = {
     maxEventCharsDesc: 'Maximum characters for non-message event text; raw JSON stays in meta.raw.',
     downloadImages: 'Download images',
     downloadImagesDesc: 'Download images from incoming messages and attach them for the model; off leaves a [图片] placeholder.',
+    allowPrivateHosts: 'Allow private image hosts',
+    allowPrivateHostsDesc: 'Download or send images on loopback and private addresses, including URL params the implementation fetches; refused by default. Enable when the image service runs on this machine or the LAN.',
     imageTimeout: 'Image timeout',
     imageTimeoutDesc: 'Per-image download timeout in milliseconds.',
     imageMaxBytes: 'Image size cap',
@@ -296,6 +318,12 @@ export function configGroup(language = 'zh') {
           type: 'boolean',
           title: t.downloadImages,
           description: t.downloadImagesDesc,
+          'x-hot': true,
+        },
+        [`${K}.images.allowPrivateHosts`]: {
+          type: 'boolean',
+          title: t.allowPrivateHosts,
+          description: t.allowPrivateHostsDesc,
           'x-hot': true,
         },
         [`${K}.images.timeoutMs`]: {

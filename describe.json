@@ -30,7 +30,7 @@
     },
     {
       "name": "onebot_call",
-      "description": "Call any OneBot action. Read-only actions run immediately; write actions require confirm=true.",
+      "description": "Call any OneBot action. Read-only actions run immediately; write actions require confirm=true. Local file paths in params and message segments must lie under the deployment's allowed read paths; URLs must resolve to public addresses.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -175,7 +175,7 @@
     },
     {
       "name": "onebot_status",
-      "description": "OneBot connection, account, catalog, received conversations, and current write/event policy.",
+      "description": "OneBot connection, account, catalog, received conversations, and current write/event/file policy.",
       "parameters": {
         "type": "object",
         "properties": {}

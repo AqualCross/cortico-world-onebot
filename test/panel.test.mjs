@@ -3,12 +3,15 @@
  */
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 import { OneBotWorld } from '../src/world.js';
 import { onebotDefinition } from '../src/definition.js';
+import { loadCatalog } from '../src/catalog.js';
 import { normalizeCatalog } from '../src/catalog-update.js';
 
 const NAPCAT_SHAPE = {
@@ -65,7 +68,7 @@ test('panel: state 报当前目录，update 拉取后换掉目录', async () => 
   try {
     const world = new OneBotWorld({ cfg: { implementation: 'napcat' } });
     const ui = world.webUi('zh');
-    assert.deepEqual(ui.panels.map((panel) => panel.id), ['actions', 'receive']);
+    assert.deepEqual(ui.panels.map((panel) => panel.id), ['actions', 'receive', 'files']);
 
     const state = await ui.invoke('actions', 'state', []);
     assert.equal(state.impl, 'napcat');
@@ -121,4 +124,63 @@ test('panel: receive state and save, including persist wiring', async () => {
   });
   await fromDefinition.webUi('zh').invoke('receive', 'save', [['group:123']]);
   assert.deepEqual(persisted.conversations, { receive: 'group:123' });
+});
+
+test('panel: 动作列表按当前策略渲染，保存写成显式禁用名单', async () => {
+  const patches = [];
+  const world = new OneBotWorld({
+    cfg: { implementation: 'snowluma' },
+    persist: (patch) => patches.push(patch),
+  });
+  const ui = world.webUi('zh');
+  const catalog = loadCatalog({ impl: 'snowluma' });
+
+  const state = await ui.invoke('actions', 'state', []);
+  assert.equal(state.items.length, catalog.total);
+  const disabled = state.items.filter((item) => !item.enabled).map((item) => item.name).sort();
+  assert.deepEqual(disabled, ['bot_exit', 'clean_cache', 'send_packet', 'set_restart']);
+  assert.equal(state.patterned, false);
+
+  // 列表展示与筛选都靠这三项：描述、分类、只读标记。
+  const send = state.items.find((item) => item.name === 'send_group_msg');
+  assert.deepEqual(
+    { summary: send.summary, category: send.category, readOnly: send.readOnly },
+    { summary: '发送群消息', category: '消息', readOnly: false },
+  );
+  assert.equal(state.items.find((item) => item.name === 'get_group_info').readOnly, true);
+
+  const keep = state.items.filter((item) => item.name !== 'send_group_msg').map((item) => item.name);
+  const saved = await ui.invoke('actions', 'save', [keep]);
+  assert.equal(saved.items.find((item) => item.name === 'send_group_msg').enabled, false);
+  assert.ok(saved.saved.split(', ').includes('send_group_msg'));
+  assert.deepEqual(patches.at(-1), { actions: { disabled: saved.saved } });
+
+  await assert.rejects(() => ui.invoke('actions', 'save', [['no_such_action']]), /unknown action/);
+  await assert.rejects(() => ui.invoke('actions', 'save', 'send_group_msg'), /must be an array/);
+
+  const all = await ui.invoke('actions', 'save', [state.items.map((item) => item.name)]);
+  assert.equal(all.disabled, 0);
+  assert.equal(all.saved, '');
+});
+
+test('panel: 读取路径保存绝对路径并报每条路径的状态', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'onebot-paths-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+
+  const patches = [];
+  const world = new OneBotWorld({ cfg: {}, persist: (patch) => patches.push(patch) });
+  const ui = world.webUi('zh');
+
+  const state = await ui.invoke('files', 'state', []);
+  assert.deepEqual(state.paths, []);
+  assert.equal(state.entries.length, 0);
+
+  const saved = await ui.invoke('files', 'save', [`${dir}\n${dir}`]);
+  assert.deepEqual(saved.paths, [dir]);
+  assert.equal(saved.entries[0].exists, true);
+  assert.equal(saved.entries[0].isDirectory, true);
+  assert.deepEqual(patches.at(-1), { files: { readPaths: dir } });
+
+  await assert.rejects(() => ui.invoke('files', 'save', ['relative/path']), /must be absolute/);
+  await assert.rejects(() => ui.invoke('files', 'nope', []), /unknown method/);
 });

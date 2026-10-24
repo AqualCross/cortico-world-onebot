@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 
 import { OneBotWorld } from '../src/world.js';
@@ -108,14 +112,13 @@ test('OneBot World: connection, action dispatcher, write gate, raw event archive
 
   const events = [];
   const host = makeHost(events);
-  const world = new OneBotWorld({
-    cfg: {
-      wsUrl: `ws://127.0.0.1:${port}`,
-      token: 'test-token',
-      actions: { writePolicy: 'confirm' },
-    },
-    timezone: 'UTC',
-  });
+  const cfg = {
+    wsUrl: `ws://127.0.0.1:${port}`,
+    token: 'test-token',
+    actions: { writePolicy: 'confirm' },
+    images: { allowPrivateHosts: true },
+  };
+  const world = new OneBotWorld({ cfg, timezone: 'UTC' });
 
   t.after(async () => {
     await world.stop();
@@ -160,6 +163,36 @@ test('OneBot World: connection, action dispatcher, write gate, raw event archive
   const sentData = JSON.parse(sent);
   assert.equal(sentData.ok, true);
   assert.equal(sentData.data.message_id, 9001);
+
+  // 本地文件读取默认全拒，且拦截发生在写操作确认之前。
+  const outside = fileURLToPath(new URL('../package.json', import.meta.url));
+  const blockedUpload = await tools.onebot_call.handler({
+    action: 'upload_group_file',
+    params: { group_id: 123, file: outside },
+    confirm: true,
+  }, {});
+  assert.equal(blockedUpload.failed, true);
+  assert.match(blockedUpload.text, /^\[blocked\].*no read paths are allowed/);
+
+  const stagedBlock = await tools.onebot_call.handler({
+    action: 'send_group_msg',
+    params: { group_id: 123, message: [{ type: 'image', data: { file: outside } }] },
+  }, {});
+  assert.equal(stagedBlock.failed, true);
+  assert.match(stagedBlock.text, /^\[blocked\]/);
+
+  const allowDir = mkdtempSync(join(tmpdir(), 'onebot-read-'));
+  t.after(() => rmSync(allowDir, { recursive: true, force: true }));
+  const allowedFile = join(allowDir, 'voice.amr');
+  writeFileSync(allowedFile, 'x');
+  await world.webUi('zh').invoke('files', 'save', [allowDir]);
+
+  const uploadAllowed = JSON.parse(await tools.onebot_call.handler({
+    action: 'upload_group_file',
+    params: { group_id: 123, file: allowedFile },
+    confirm: true,
+  }, {}));
+  assert.equal(uploadAllowed.ok, true);
 
   // 被禁用的 action 对模型等同于不存在：两者回执一致，只有回显的 action 名不同。
   const hidden = await tools.onebot_call.handler({
@@ -206,6 +239,34 @@ test('OneBot World: connection, action dispatcher, write gate, raw event archive
   assert.equal(viewed.blobs[0].mime, 'image/png');
   assert.match(viewed.text, /^\[image /);
 
+  // action 参数里的 URL 由实现对端拉取，同一套公网判定在 onebot_call 上生效。
+  cfg.images.allowPrivateHosts = false;
+  const blockedFetch = await tools.onebot_call.handler({
+    action: 'download_file',
+    params: { url: `http://127.0.0.1:${imagePort}/a.png` },
+    confirm: true,
+  }, {});
+  assert.equal(blockedFetch.failed, true);
+  assert.match(blockedFetch.text, /^\[blocked\].*blocked address: 127\.0\.0\.1/);
+
+  const blockedSegment = await tools.onebot_call.handler({
+    action: 'send_group_msg',
+    params: {
+      group_id: 123,
+      message: [{ type: 'image', data: { url: `http://127.0.0.1:${imagePort}/a.png` } }],
+    },
+  }, {});
+  assert.equal(blockedSegment.failed, true);
+  assert.match(blockedSegment.text, /^\[blocked\]/);
+
+  cfg.images.allowPrivateHosts = true;
+  const allowedFetch = JSON.parse(await tools.onebot_call.handler({
+    action: 'download_file',
+    params: { url: `http://127.0.0.1:${imagePort}/a.png` },
+    confirm: true,
+  }, {}));
+  assert.equal(allowedFetch.ok, true);
+
   const archived = await tools.onebot_events.handler({ kind: 'message/*', limit: 10 }, {});
   const archivedData = JSON.parse(archived);
   assert.equal(archivedData.count, 1);
@@ -215,6 +276,7 @@ test('OneBot World: connection, action dispatcher, write gate, raw event archive
   assert.equal(status.connected, true);
   assert.equal(status.selfId, 10001);
   assert.ok(status.catalog.source);
+  assert.deepEqual(status.files.readPaths, [resolve(allowDir)]);
   assert.ok(requests.some((request) => request.action === 'send_group_msg'));
 
   // 控制台的连接徽标要说出连的是哪个实现，而不只是“已连接”。
@@ -285,6 +347,20 @@ test('OneBot World: connection, action dispatcher, write gate, raw event archive
   const statusAfter = JSON.parse(await tools.onebot_status.handler({}, {}));
   assert.deepEqual(statusAfter.conversations.receive.slice().sort(), ['group:123', 'private:456']);
   assert.equal(statusAfter.conversations.all, false);
+
+  // 动作列表保存后，未勾选的动作对模型等同于不存在。
+  const ui = world.webUi('zh');
+  const listed = await ui.invoke('actions', 'state', []);
+  const allNames = listed.items.map((item) => item.name);
+  await ui.invoke('actions', 'save', [allNames.filter((name) => name !== 'send_group_msg')]);
+  const hiddenByPanel = await tools.onebot_call.handler({
+    action: 'send_group_msg',
+    params: { group_id: 123, message: 'hello' },
+    confirm: true,
+  }, {});
+  assert.equal(hiddenByPanel.failed, true);
+  assert.match(hiddenByPanel.text, /\[unknown action\] send_group_msg/);
+  await ui.invoke('actions', 'save', [allNames]);
 });
 
 test('onebot_receive: readOnly and deny block writes without a connection', async () => {

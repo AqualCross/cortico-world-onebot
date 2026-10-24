@@ -26,6 +26,50 @@ const ZH = {
     updating: '正在拉取…',
     updated: (actions, categories) => `已更新：${actions} 个动作 / ${categories} 个分类`,
     noSource: '这个实现没有默认地址，填一个再点。',
+    list: '允许的动作',
+    listDesc: '勾选模型可以调用的动作；取消勾选即禁用。',
+    action: '动作',
+    description: '描述',
+    readOnly: '只读',
+    write: '写',
+    filterLabel: '筛选',
+    filter: '动作名或描述',
+    categoryFilter: '分类',
+    typeFilter: '类型',
+    allCategories: '全部分类',
+    allTypes: '全部类型',
+    selectAll: '全选',
+    save: '保存',
+    saving: '正在保存…',
+    saved: (on, off) => `已保存：启用 ${on} 个，禁用 ${off} 个`,
+    summaryAll: (n) => `已选全部 ${n} 个动作`,
+    summary: (on, total) => `已选 ${on} / ${total} 个动作`,
+    none: '没有选中的动作：模型将无法调用任何 action。',
+    empty: '目录里没有动作。',
+    patterned: '当前禁用规则含通配符或分类，保存后会展开成逐项名单。',
+    unsaved: '动作选择还没保存，确定离开？',
+  },
+  files: {
+    title: '读取路径',
+    desc: '动作只能读取这些目录或文件里的本地内容；未列出的一律拒绝。',
+    label: '允许的路径',
+    placeholder: '每行一个绝对路径，例如 D:\\Coo\\data\\voice',
+    add: '添加目录…',
+    pickTitle: '选择允许读取的目录',
+    save: '保存',
+    saving: '正在保存…',
+    saved: (n) => `已保存：${n} 个路径`,
+    summary: (n) => `${n} 个路径可读；其余本地文件拒绝`,
+    empty: '还没有添加路径。',
+    emptyPolicy: '白名单为空：所有本地文件读取都会被拒绝。',
+    path: '路径',
+    kind: '类型',
+    status: '状态',
+    directory: '目录',
+    file: '文件',
+    exists: '存在',
+    missing: '不存在',
+    unsaved: '读取路径还没保存，确定离开？',
   },
   receive: {
     title: '接收的会话',
@@ -76,6 +120,52 @@ const EN = {
     updating: 'Fetching…',
     updated: (actions, categories) => `Updated: ${actions} actions / ${categories} categories`,
     noSource: 'No default URL for this implementation; fill one in first.',
+    list: 'Allowed actions',
+    listDesc: 'Checked actions are callable; unchecking one disables it.',
+    action: 'Action',
+    description: 'Description',
+    readOnly: 'read',
+    write: 'write',
+    filterLabel: 'Filter',
+    filter: 'Action name or description',
+    categoryFilter: 'Category',
+    typeFilter: 'Kind',
+    allCategories: 'All categories',
+    allTypes: 'All kinds',
+    selectAll: 'Select all',
+    save: 'Save',
+    saving: 'Saving…',
+    saved: (on, off) => `Saved: ${on} enabled, ${off} disabled`,
+    summaryAll: (n) => `All ${n} actions selected`,
+    summary: (on, total) => `${on} of ${total} actions selected`,
+    none: 'No actions selected: the model cannot call any action.',
+    empty: 'The catalog has no actions.',
+    patterned: 'The current disable rules use a wildcard or category; saving writes them as an explicit list.',
+    unsaved: 'Action selection is not saved. Leave anyway?',
+  },
+  files: {
+    title: 'Read paths',
+    desc: 'Actions may only read local files under these directories; everything else is refused.',
+    label: 'Allowed paths',
+    placeholder: 'One absolute path per line, e.g. D:\\Coo\\data\\voice',
+    add: 'Add directory…',
+    pickTitle: 'Choose a directory actions may read',
+    save: 'Save',
+    saving: 'Saving…',
+    saved: (n) => (n === 1 ? 'Saved: 1 path' : `Saved: ${n} paths`),
+    summary: (n) => (n === 1
+      ? '1 path readable; all other local files refused'
+      : `${n} paths readable; all other local files refused`),
+    empty: 'No paths added yet.',
+    emptyPolicy: 'The allowlist is empty: every local file read is refused.',
+    path: 'Path',
+    kind: 'Kind',
+    status: 'Status',
+    directory: 'directory',
+    file: 'file',
+    exists: 'exists',
+    missing: 'missing',
+    unsaved: 'Read paths are not saved. Leave anyway?',
   },
   receive: {
     title: 'Received conversations',
@@ -122,34 +212,167 @@ export default {
           onInput: () => syncButton(),
         });
         const token = ui.input({ type: 'password', placeholder: S.tokenPlaceholder });
-        const button = ui.button(S.run, { variant: 'primary', onClick: () => run() });
-        const bar = ui.rowbar();
-        bar.append(button);
+        const updateButton = ui.button(S.run, { variant: 'primary', onClick: () => { void run(); } });
+        const updateBar = ui.rowbar();
+        updateBar.append(updateButton);
 
         const form = ui.section(S.update, S.updateDesc);
-        form.append(ui.field(S.url, url), ui.field(S.token, token), bar, message);
+        form.append(ui.field(S.url, url), ui.field(S.token, token), updateBar, message);
 
-        card.body.append(facts, form);
+        const filter = ui.input({ placeholder: S.filter, onInput: () => applyFilter() });
+        const categorySelect = ui.select({
+          options: [{ value: '', label: S.allCategories }],
+          onInput: () => applyFilter(),
+        });
+        const typeSelect = ui.select({
+          options: [
+            { value: '', label: S.allTypes },
+            { value: 'read', label: S.readOnly },
+            { value: 'write', label: S.write },
+          ],
+          onInput: () => applyFilter(),
+        });
+        const searchWrap = ui.h('div', 'grow');
+        searchWrap.append(ui.field(S.filterLabel, filter));
+        const filters = ui.rowbar();
+        filters.append(searchWrap, ui.field(S.categoryFilter, categorySelect), ui.field(S.typeFilter, typeSelect));
+
+        const selectAll = ui.checkbox(S.selectAll, { onChange: (checked) => onSelectAll(checked) });
+        const save = ui.button(S.save, { variant: 'primary', onClick: () => { void persist(); } });
+        const listBar = ui.rowbar();
+        listBar.append(selectAll.el, save);
+        const summary = ui.msgline();
+        const listMessage = ui.msgline();
+        const table = ui.table({ head: [S.action, S.description], maxHeight: '420px' });
+        const list = ui.section(S.list, S.listDesc);
+        list.append(filters, listBar, summary, listMessage, table.el);
+
+        card.body.append(facts, form, list);
         root.append(card.el);
 
-        function renderFacts(state) {
+        let state = null;
+        let rows = [];
+        let selected = new Set();
+        let dirty = false;
+        let busy = false;
+
+        ctx.guardLeave(() => (dirty ? S.unsaved : null));
+
+        function renderFacts(next) {
           void ctx.refresh().catch(() => { /* Refresh connection and action-count badges. */ });
           facts.replaceChildren(ui.kv([
-            { k: S.impl, v: state.impl },
-            { k: S.detected, v: state.detected || '—' },
-            { k: S.source, v: state.source },
-            { k: S.version, v: state.version || '—' },
-            { k: S.actions, v: String(state.actions) },
-            { k: S.categories, v: String(state.categories) },
-            { k: S.disabled, v: String(state.disabled) },
+            { k: S.impl, v: next.impl },
+            { k: S.detected, v: next.detected || '—' },
+            { k: S.source, v: next.source },
+            { k: S.version, v: next.version || '—' },
+            { k: S.actions, v: String(next.actions) },
+            { k: S.categories, v: String(next.categories) },
+            { k: S.disabled, v: String(next.disabled) },
           ]));
+        }
+
+        function renderList(next) {
+          state = next;
+          selected = new Set(next.items.filter((item) => item.enabled).map((item) => item.name));
+          table.clear(next.items.length ? undefined : S.empty);
+          rows = next.items.map((item) => {
+            const check = ui.checkbox(item.name, {
+              checked: selected.has(item.name),
+              onChange: (checked) => onToggle(item, checked),
+            });
+            check.input.title = item.summary || item.name;
+            const tr = table.addRow([
+              check.el,
+              { text: item.summary || '—', cls: 'txt' },
+            ]);
+            return { item, tr, check };
+          });
+          fillCategories(next.items);
+          dirty = false;
+          listMessage.classList.remove('bad');
+          listMessage.textContent = next.patterned ? S.patterned : '';
+          syncControls();
+          syncSummary();
+          applyFilter();
+        }
+
+        /** 分类随当前目录变化；保留仍然存在的选项，否则回到「全部分类」。 */
+        function fillCategories(items) {
+          const current = categorySelect.value;
+          const categories = [...new Set(items.map((item) => item.category).filter(Boolean))]
+            .sort((a, b) => a.localeCompare(b, 'zh'));
+          const entries = [
+            { value: '', label: S.allCategories },
+            ...categories.map((category) => ({ value: category, label: category })),
+          ];
+          categorySelect.replaceChildren(...entries.map(({ value, label }) => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = label;
+            return option;
+          }));
+          categorySelect.value = categories.includes(current) ? current : '';
+        }
+
+        function onToggle(item, checked) {
+          if (checked) selected.add(item.name);
+          else selected.delete(item.name);
+          dirty = true;
+          syncControls();
+          syncSummary();
+        }
+
+        function onSelectAll(checked) {
+          if (!state) return;
+          selected = checked ? new Set(state.items.map((item) => item.name)) : new Set();
+          for (const row of rows) row.check.setChecked(selected.has(row.item.name));
+          dirty = true;
+          syncControls();
+          syncSummary();
+        }
+
+        function syncControls() {
+          const disabled = busy || !state || state.items.length === 0;
+          filter.disabled = busy;
+          categorySelect.disabled = busy;
+          typeSelect.disabled = busy;
+          save.disabled = disabled;
+          selectAll.input.disabled = disabled;
+          for (const row of rows) row.check.input.disabled = busy;
+        }
+
+        function syncSummary() {
+          if (!state) return;
+          const total = state.items.length;
+          const count = selected.size;
+          if (count === 0) summary.textContent = total ? S.none : '';
+          else if (count === total) summary.textContent = S.summaryAll(total);
+          else summary.textContent = S.summary(count, total);
+          const all = total > 0 && count === total;
+          selectAll.setChecked(all);
+          selectAll.input.indeterminate = count > 0 && !all;
+        }
+
+        function applyFilter() {
+          const q = filter.value.trim().toLowerCase();
+          const category = categorySelect.value;
+          const type = typeSelect.value;
+          for (const row of rows) {
+            const item = row.item;
+            const hay = `${item.name} ${item.summary} ${item.category}`.toLowerCase();
+            const matches = (!q || hay.includes(q))
+              && (!category || item.category === category)
+              && (!type || (type === 'read' ? item.readOnly : !item.readOnly));
+            row.tr.hidden = !matches;
+          }
         }
 
         async function load() {
           try {
-            const state = await ctx.invoke('state');
-            renderFacts(state);
-            if (!url.value && state.defaultUrl) url.value = state.defaultUrl;
+            const next = await ctx.invoke('state');
+            renderFacts(next);
+            renderList(next);
+            if (!url.value && next.defaultUrl) url.value = next.defaultUrl;
             syncButton();
           } catch (error) {
             message.textContent = String(error);
@@ -160,20 +383,21 @@ export default {
         /** 没有地址就没法更新：按钮置灰并说明原因，填了地址再放开。 */
         function syncButton() {
           const ready = url.value.trim().length > 0;
-          button.disabled = !ready;
+          updateButton.disabled = !ready;
           if (!ready && !message.textContent) message.textContent = S.noSource;
           if (ready && message.textContent === S.noSource) message.textContent = '';
         }
 
         async function run() {
-          const release = ui.disable(button);
+          const release = ui.disable(updateButton);
           message.classList.remove('bad');
           message.textContent = S.updating;
           try {
-            const state = await ctx.invoke('update', [url.value, token.value]);
-            renderFacts(state);
-            const text = S.updated(state.actions, state.categories);
-            message.textContent = state.saved ? `${text} · ${state.saved}` : text;
+            const next = await ctx.invoke('update', [url.value, token.value]);
+            renderFacts(next);
+            renderList(next);
+            const text = S.updated(next.actions, next.categories);
+            message.textContent = next.saved ? `${text} · ${next.saved}` : text;
             ui.toast(text, 'ok');
           } catch (error) {
             message.textContent = String(error);
@@ -183,8 +407,115 @@ export default {
           }
         }
 
+        async function persist() {
+          if (busy || !state || state.items.length === 0) return;
+          busy = true;
+          syncControls();
+          const release = ui.disable(save);
+          listMessage.classList.remove('bad');
+          listMessage.textContent = S.saving;
+          try {
+            const next = await ctx.invoke('save', [[...selected]]);
+            renderFacts(next);
+            renderList(next);
+            const text = S.saved(next.actions - next.disabled, next.disabled);
+            listMessage.textContent = text;
+            ui.toast(text, 'ok');
+            void ctx.refresh().catch(() => { /* Refresh the action-count badge. */ });
+          } catch (error) {
+            listMessage.textContent = String(error);
+            listMessage.classList.add('bad');
+          } finally {
+            busy = false;
+            release.dispose();
+            syncControls();
+          }
+        }
+
         ctx.interval(() => { void ctx.refresh().catch(() => {}); }, 15000);
         await load();
+      },
+    },
+
+    files: {
+      mount: async (ctx) => {
+        const { ui, root } = ctx;
+        const S = String(ctx.language ?? '').startsWith('zh') ? ZH.files : EN.files;
+
+        let dirty = false;
+        let busy = false;
+
+        const card = ui.sheet({ title: S.title, desc: S.desc });
+        const area = ui.textarea({
+          rows: 6,
+          cls: 'mono',
+          placeholder: S.placeholder,
+          onInput: () => { dirty = true; },
+        });
+        const add = ui.button(S.add, { onClick: () => { void pick(); } });
+        const save = ui.button(S.save, { variant: 'primary', onClick: () => { void persist(); } });
+        const bar = ui.rowbar();
+        bar.append(add, save);
+        const summary = ui.msgline();
+        const message = ui.msgline();
+        const table = ui.table({ head: [S.path, S.kind, S.status], maxHeight: '240px' });
+
+        card.body.append(ui.field(S.label, area), bar, summary, message, table.el);
+        root.append(card.el);
+
+        ctx.guardLeave(() => (dirty ? S.unsaved : null));
+
+        function render(next) {
+          area.value = next.paths.join('\n');
+          dirty = false;
+          table.clear(next.entries.length ? undefined : S.empty);
+          for (const entry of next.entries) {
+            table.addRow([
+              { text: entry.resolved || entry.path, cls: 'mono' },
+              entry.exists ? (entry.isDirectory ? S.directory : S.file) : '—',
+              entry.exists ? S.exists : S.missing,
+            ]);
+          }
+          summary.textContent = next.paths.length ? S.summary(next.paths.length) : S.emptyPolicy;
+        }
+
+        async function pick() {
+          const picked = await ctx.pickPath({ kind: 'directory', title: S.pickTitle });
+          if (!picked) return;
+          const lines = area.value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+          if (!lines.includes(picked)) lines.push(picked);
+          area.value = lines.join('\n');
+          dirty = true;
+        }
+
+        async function persist() {
+          if (busy) return;
+          busy = true;
+          const release = ui.disable(add, save, area);
+          message.classList.remove('bad');
+          message.textContent = S.saving;
+          try {
+            const next = await ctx.invoke('save', [area.value]);
+            render(next);
+            const text = S.saved(next.paths.length);
+            message.textContent = text;
+            ui.toast(text, 'ok');
+            void ctx.refresh().catch(() => { /* Refresh the read-path badge. */ });
+          } catch (error) {
+            message.textContent = String(error);
+            message.classList.add('bad');
+          } finally {
+            busy = false;
+            release.dispose();
+          }
+        }
+
+        try {
+          render(await ctx.invoke('state'));
+        } catch (error) {
+          message.textContent = String(error);
+          message.classList.add('bad');
+        }
       },
     },
 

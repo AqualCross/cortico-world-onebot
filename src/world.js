@@ -29,6 +29,13 @@ import { capText, compactJson, eventKind, renderMessage } from './render.js';
 import { downloadImage, extensionForMime, imageSourcesFromMessage } from './images.js';
 import { detectImplementation } from './implementations.js';
 import { OneBotDriver } from './driver.js';
+import {
+  checkActionParams,
+  checkActionUrls,
+  normalizeReadPaths,
+  readPathStatus,
+  readPathsOf,
+} from './file-policy.js';
 
 const MAX_ACTION_RESULT_CHARS = 20000;
 
@@ -68,7 +75,9 @@ export const ONEBOT_TOOL_DECLS = [
     name: 'onebot_call',
     tags: ['act'],
     description:
-      'Call any OneBot action. Read-only actions run immediately; write actions require confirm=true.',
+      'Call any OneBot action. Read-only actions run immediately; write actions require confirm=true. '
+      + 'Local file paths in params and message segments must lie under the deployment\'s allowed read paths; '
+      + 'URLs must resolve to public addresses.',
     parameters: {
       type: 'object',
       properties: {
@@ -149,7 +158,7 @@ export const ONEBOT_TOOL_DECLS = [
     name: 'onebot_status',
     tags: ['read'],
     description:
-      'OneBot connection, account, catalog, received conversations, and current write/event policy.',
+      'OneBot connection, account, catalog, received conversations, and current write/event/file policy.',
     parameters: { type: 'object', properties: {} },
   },
 ];
@@ -205,6 +214,7 @@ export class OneBotWorld {
       : (this.#lastError || (this.#driver ? 'connecting' : t.disconnected));
     const receive = receivePolicy(s);
     const receiveWildcard = receive.patterns.some((pattern) => pattern !== '*' && pattern.includes('*'));
+    const readPaths = readPathsOf(s);
     return {
       label: t.label,
       lamps: [{ label: t.lamp, state, hint }],
@@ -222,6 +232,11 @@ export class OneBotWorld {
           tone: receive.patterns.length ? 'on' : 'off',
         },
         { label: t.actions, value: `${counts.enabled}/${counts.total}` },
+        {
+          label: t.readPaths,
+          value: readPaths.length ? t.readPathsCount(readPaths.length) : t.readPathsBlocked,
+          tone: readPaths.length ? 'on' : 'off',
+        },
       ],
       config: [configGroup(language)],
       panels: [
@@ -234,6 +249,11 @@ export class OneBotWorld {
           id: 'receive',
           title: t.receivePanelTitle,
           description: t.receivePanelDesc,
+        },
+        {
+          id: 'files',
+          title: t.readPathsPanelTitle,
+          description: t.readPathsPanelDesc,
         },
       ],
       invoke: (panel, method, args) => this.#invokePanel(panel, method, args ?? []),
@@ -252,6 +272,7 @@ export class OneBotWorld {
     if (panel === 'actions') {
       if (method === 'state') return this.#catalogState();
       if (method === 'update') return await this.#updateCatalog(args[0], args[1]);
+      if (method === 'save') return this.#saveActionSelection(args[0]);
       throw new Error(`unknown method: ${panel}.${method}`);
     }
     if (panel === 'receive') {
@@ -259,11 +280,19 @@ export class OneBotWorld {
       if (method === 'save') return await this.#saveReceive(args[0]);
       throw new Error(`unknown method: ${panel}.${method}`);
     }
+    if (panel === 'files') {
+      if (method === 'state') return this.#filesState();
+      if (method === 'save') return this.#saveReadPaths(args[0]);
+      throw new Error(`unknown method: ${panel}.${method}`);
+    }
     throw new Error(`unknown panel: ${panel}`);
   }
 
   #catalogState() {
-    const counts = this.#catalog.counts(actionPolicy(this.#settings));
+    const settings = this.#settings;
+    const policy = actionPolicy(settings);
+    const counts = this.#catalog.counts(policy);
+    const rules = patterns(settings.actions.disabled);
     const idn = this.#driver?.identity;
     return {
       connected: this.#driver?.connected === true,
@@ -276,7 +305,62 @@ export class OneBotWorld {
       categories: this.#catalog.categories.length,
       disabled: counts.disabled,
       defaultUrl: catalogUrlFor(this.#catalog.impl),
+      items: this.#catalog.actions.map((action) => ({
+        name: action.name,
+        category: action.category ?? '',
+        summary: action.summary ?? '',
+        readOnly: action.readOnly === true,
+        enabled: !policy.disabled(action, action.name),
+      })),
+      patterned: rules.some((rule) => rule.includes('*') || rule.startsWith('category:')),
     };
+  }
+
+  /** 面板保存的是勾选后的动作名；落盘写成显式的禁用名单。 */
+  #saveActionSelection(value) {
+    if (!Array.isArray(value)) throw new Error('actions must be an array of action names');
+    const names = new Set();
+    for (const entry of value) {
+      const name = typeof entry === 'string' ? entry.trim() : '';
+      if (!name) throw new Error(`invalid action name: ${String(entry)}`);
+      const spec = this.#catalog.resolve(name);
+      if (!spec) throw new Error(`unknown action: ${name}`);
+      names.add(spec.name);
+    }
+
+    const disabled = this.#catalog.actions
+      .filter((action) => !names.has(action.name))
+      .map((action) => action.name);
+    const stored = disabled.join(', ');
+    this.#writeActionsDisabled(stored);
+    return { ...this.#catalogState(), saved: stored };
+  }
+
+  #writeActionsDisabled(value) {
+    this.#persist?.({ actions: { disabled: value } });
+    if (!this.#cfg.actions || typeof this.#cfg.actions !== 'object') this.#cfg.actions = {};
+    this.#cfg.actions.disabled = value;
+    this.#log?.info?.('actions updated', { disabled: patterns(value).length });
+    return value;
+  }
+
+  #filesState() {
+    const paths = readPathsOf(this.#settings);
+    return {
+      paths,
+      entries: paths.map((path) => readPathStatus(path)),
+      stored: String(this.#settings.files?.readPaths ?? ''),
+    };
+  }
+
+  #saveReadPaths(value) {
+    const paths = normalizeReadPaths(value);
+    const stored = paths.join('\n');
+    this.#persist?.({ files: { readPaths: stored } });
+    if (!this.#cfg.files || typeof this.#cfg.files !== 'object') this.#cfg.files = {};
+    this.#cfg.files.readPaths = stored;
+    this.#log?.info?.('read paths updated', { count: paths.length });
+    return { ...this.#filesState(), saved: stored };
   }
 
   async #updateCatalog(url, token) {
@@ -456,6 +540,36 @@ export class OneBotWorld {
     if (!spec || policy.disabled(spec, spec.name)) {
       return fail(`[unknown action] ${action}; use onebot_actions to find a valid action.`);
     }
+
+    const blocked = checkActionParams(spec, params, s);
+    if (blocked) {
+      this.#log?.warn?.('local file blocked', {
+        action: name,
+        path: blocked.path,
+        via: blocked.via,
+        reason: blocked.reason,
+      });
+      return fail(
+        `[blocked] ${name} would read ${blocked.path} (${blocked.via}), which ${blocked.reason}. `
+        + 'Add its directory to the OneBot read-path allowlist (worlds.onebot.files.readPaths) to allow it.',
+      );
+    }
+
+    const blockedUrl = await checkActionUrls(spec, params, s);
+    if (blockedUrl) {
+      this.#log?.warn?.('private URL blocked', {
+        action: name,
+        url: blockedUrl.url,
+        via: blockedUrl.via,
+        reason: blockedUrl.reason,
+      });
+      return fail(
+        `[blocked] ${name} would fetch ${blockedUrl.url} (${blockedUrl.via}): ${blockedUrl.reason}. `
+        + 'Only public addresses are allowed; enable worlds.onebot.images.allowPrivateHosts '
+        + 'if the service is on this machine or the LAN.',
+      );
+    }
+
     if (s.actions.readOnly === true && !readOnly) {
       return fail(`[read-only] ${name} is a write action; this deployment is read-only.`);
     }
@@ -738,7 +852,11 @@ export class OneBotWorld {
     try {
       const timeoutMs = Number(args.timeout_ms) || Number(s.images.timeoutMs) || DEFAULTS.images.timeoutMs;
       const maxBytes = Number(s.images.maxImageBytes) || DEFAULTS.images.maxImageBytes;
-      const image = await downloadImage(url, { timeoutMs, maxBytes });
+      const image = await downloadImage(url, {
+        timeoutMs,
+        maxBytes,
+        allowPrivate: s.images.allowPrivateHosts === true,
+      });
       const ext = extensionForMime(image.mime);
       return {
         text: `[image ${url}]`,
@@ -770,6 +888,9 @@ export class OneBotWorld {
       actions: {
         readOnly: s.actions.readOnly === true,
         writePolicy: s.actions.writePolicy,
+      },
+      files: {
+        readPaths: readPathsOf(s),
       },
       events: {
         deliver: patterns(s.events.deliver),
@@ -845,8 +966,9 @@ export class OneBotWorld {
 
     const timeoutMs = Number(s.images.timeoutMs) || DEFAULTS.images.timeoutMs;
     const maxBytes = Number(s.images.maxImageBytes) || DEFAULTS.images.maxImageBytes;
+    const allowPrivate = s.images.allowPrivateHosts === true;
     const settled = await Promise.allSettled(
-      sources.map((source) => downloadImage(source.url, { timeoutMs, maxBytes })),
+      sources.map((source) => downloadImage(source.url, { timeoutMs, maxBytes, allowPrivate })),
     );
 
     const blobs = [];
