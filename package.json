@@ -36,6 +36,7 @@
   },
   "files": [
     "src",
+    "assets/icon.png",
     "tools/sync-catalog.mjs",
     "describe.json",
     "CHANGELOG.md",
@@ -60,6 +61,7 @@
     "kind": "world",
     "api": 6,
     "displayName": "OneBot",
+    "icon": "assets/icon.png",
     "webUiClient": "src/webui/client.js",
     "tags": [
       "qq",

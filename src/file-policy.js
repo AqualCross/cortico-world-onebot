@@ -9,7 +9,7 @@
  * 相对路径一律拒绝，只有只读 action 的裸文件名例外——那是实现侧的缓存标识。
  * 参数里的 http(s) URL 由实现对端拉取，另走公网地址判定，和图片下载同一套规则。
  */
-import { realpathSync, statSync } from 'node:fs';
+import { existsSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -83,12 +83,14 @@ export function checkLocalPath(value, allowed, { tokenOk = false } = {}) {
   }
 
   const resolved = realOrSelf(resolve(target));
-  for (const root of allowed) {
-    if (isInside(resolved, realOrSelf(resolve(root)))) return null;
+  const inside = allowed.some((root) => isInside(resolved, realOrSelf(resolve(root))));
+  if (!inside) {
+    return allowed.length
+      ? 'is outside the allowed read paths'
+      : 'is blocked because no read paths are allowed';
   }
-  return allowed.length
-    ? 'is outside the allowed read paths'
-    : 'is blocked because no read paths are allowed';
+  if (!existsSync(resolved)) return 'does not exist';
+  return null;
 }
 
 /** 一次调用里所有会当作文件或 URL 传给实现的取值。 */
