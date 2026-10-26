@@ -53,6 +53,7 @@ test('checkLocalPath: 绝对路径必须在白名单内', (t) => {
   const outside = tempRoot(t);
   writeFileSync(join(root, 'voice.amr'), 'x');
   assert.equal(checkLocalPath(join(root, 'voice.amr'), [root]), null);
+  assert.equal(checkLocalPath(join(root, 'missing.amr'), [root]), 'does not exist');
   assert.equal(checkLocalPath(join(outside, 'voice.amr'), [root]), 'is outside the allowed read paths');
   assert.equal(checkLocalPath(pathToFileURL(join(root, 'voice.amr')).href, [root]), null);
   assert.equal(checkLocalPath(join(outside, 'voice.amr'), []), 'is blocked because no read paths are allowed');
@@ -63,6 +64,7 @@ test('collectLocalRefs: 文件参数、消息段、CQ 码和 files 数组', (t) 
   const root = tempRoot(t);
   const outside = tempRoot(t);
   const inside = join(root, 'a.png');
+  writeFileSync(inside, 'x');
   const blocked = join(outside, 'a.png');
 
   const upload = spec('upload_group_file');

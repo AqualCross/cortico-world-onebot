@@ -1,5 +1,7 @@
 # OneBot · cortico-world-onebot
 
+<img src="assets/icon.png" alt="OneBot" width="128" height="128">
+
 让桌宠使用 QQ。连接到你的 NapCat 或 SnowLuma，然后在 QQ 上和 TA 聊天吧。
 
 支持所有 OneBot v11 正向 WebSocket 实现：NapCat、SnowLuma、LLOneBot、Lagrange.OneBot 等。
@@ -144,6 +146,7 @@ meta_event/*                所有 meta 事件
 
 - `http(s)`、`base64://`、`data:` 不读本地，直接放过；
 - 绝对路径与 `file://` URL 必须落在白名单目录或文件内；符号链接按解析后的真实路径判定；
+- 白名单内的路径必须存在；拼错或已删除的文件在调用前返回 `[not found] ... does not exist`；
 - 相对路径一律拒绝；只读 action 的裸文件名（如 `get_image` 的缓存文件名）按实现侧标识放过。
 
 检查覆盖 action 参数里声明为 `file` / `image` / `video` / `record` 的字段、`files` 与 `*_path` 参数、消息段里的 `file` / `url`，以及字符串消息里的 CQ 码。拦截发生在写操作确认之前，回执里给出被拦的路径和该去哪里放开。

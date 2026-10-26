@@ -549,9 +549,13 @@ export class OneBotWorld {
         via: blocked.via,
         reason: blocked.reason,
       });
+      const missing = blocked.reason === 'does not exist';
       return fail(
-        `[blocked] ${name} would read ${blocked.path} (${blocked.via}), which ${blocked.reason}. `
-        + 'Add its directory to the OneBot read-path allowlist (worlds.onebot.files.readPaths) to allow it.',
+        `${missing ? '[not found]' : '[blocked]'} ${name} would read ${blocked.path} (${blocked.via}), `
+        + `which ${blocked.reason}. `
+        + (missing
+          ? 'Check the path; it may be misspelled or deleted.'
+          : 'Add its directory to the OneBot read-path allowlist (worlds.onebot.files.readPaths) to allow it.'),
       );
     }
 

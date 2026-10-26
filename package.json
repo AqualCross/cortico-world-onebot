@@ -1,6 +1,6 @@
 {
   "name": "cortico-world-onebot",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type": "module",
   "description": "让TA使用QQ。连接到你的napcat或者snowluma，然后在QQ上和TA聊天吧。就像直接用QQ一样，使用几乎所有功能。",
   "license": "MIT",
@@ -36,6 +36,7 @@
   },
   "files": [
     "src",
+    "assets/icon.png",
     "tools/sync-catalog.mjs",
     "describe.json",
     "CHANGELOG.md",
@@ -60,6 +61,7 @@
     "kind": "world",
     "api": 6,
     "displayName": "OneBot",
+    "icon": "assets/icon.png",
     "webUiClient": "src/webui/client.js",
     "tags": [
       "qq",

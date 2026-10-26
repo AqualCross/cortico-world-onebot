@@ -194,6 +194,15 @@ test('OneBot World: connection, action dispatcher, write gate, raw event archive
   }, {}));
   assert.equal(uploadAllowed.ok, true);
 
+  // 白名单内的路径也要真实存在：拼错路径时直接报 not found，不落到实现对端。
+  const missingFile = await tools.onebot_call.handler({
+    action: 'upload_group_file',
+    params: { group_id: 123, file: join(allowDir, 'missing.png') },
+    confirm: true,
+  }, {});
+  assert.equal(missingFile.failed, true);
+  assert.match(missingFile.text, /^\[not found\].*does not exist/);
+
   // 被禁用的 action 对模型等同于不存在：两者回执一致，只有回显的 action 名不同。
   const hidden = await tools.onebot_call.handler({
     action: 'set_restart',
